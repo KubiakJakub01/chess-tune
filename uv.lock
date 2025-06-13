@@ -41,10 +41,10 @@ requires-dist = [{ name = "numpy", specifier = ">=2.3.0" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "mypy", specifier = ">=1.16.0" },
-    { name = "pre-commit", specifier = ">=4.2.0" },
-    { name = "pylint", specifier = ">=3.3.7" },
-    { name = "ruff", specifier = ">=0.11.13" },
+    { name = "mypy", specifier = "==1.16.0" },
+    { name = "pre-commit", specifier = "==4.2.0" },
+    { name = "pylint", specifier = "==3.3.7" },
+    { name = "ruff", specifier = "==0.11.13" },
 ]
 
 [[package]]
