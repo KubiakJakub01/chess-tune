@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "chess>=1.11.2",
+    "coloredlogs>=15.0.1",
     "numpy>=2.3.0",
     "torch>=2.7.1",
     "torchvision>=0.22.1",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
