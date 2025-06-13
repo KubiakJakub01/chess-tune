@@ -1,9 +1,9 @@
 import argparse
-from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
+from pydantic import BaseModel
 from tqdm import tqdm
 
 from ..utils import log_error, log_info, log_warning
@@ -67,31 +67,13 @@ def parse_args(raw_args: list[str] | None = None) -> argparse.Namespace:
     return parsed
 
 
-@dataclass(frozen=True, slots=True)
-class DataSource:
-    """Represents a downloadable data source.
-
-    Attributes
-    ----------
-    name:
-        Short identifier used on the command line.
-    base_url:
-        Base URL without trailing slash (e.g. ``https://database.lichess.org/standard``).
-    file_pattern:
-        Python-format string used to build the file name from the provided
-        *year* and *month* parameters.  Example::
-
-            'lichess_db_standard_rated_{year}-{month}.pgn.zst'
-
-        Both placeholders must be present in the pattern.
-    description:
-        Human-readable description shown when listing available sources.
-    """
+class DataSource(BaseModel):
+    """Represents a downloadable data source."""
 
     name: str
     base_url: str
     file_pattern: str
-    description: str = ''
+    description: str
 
     def build_url(self, year_month: str) -> str:
         """Return the full download URL for *year_month* (``YYYY-MM``)."""
