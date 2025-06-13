@@ -18,7 +18,6 @@ from ..sft_tasks import (
 )
 from ..tokenizer_ops import (
     BoardRepr,
-    board_to_custom_token_sequence,
     san_move_to_custom_token_sequence,
 )
 from ..utils import log_info, log_warning
@@ -27,14 +26,14 @@ from ..utils import log_info, log_warning
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--pgn_filepath', type=Path, required=True)
+    parser.add_argument('--output_filepath', type=Path, required=True)
     parser.add_argument(
         '--tasks',
         choices=TASK_REGISTRY.keys(),
         default=list(TASK_REGISTRY.keys()),
         nargs='+',
-        required=True,
     )
-    parser.add_argument('--output_filepath', type=Path, required=True)
+    parser.add_argument('--max_records', type=int, default=None)
     return parser.parse_args()
 
 
@@ -91,7 +90,7 @@ def process_pgn_file(pgn_filepath: Path, tasks: list[str]) -> Generator[dict, No
             if 'board_and_move_to_board' in tasks:
                 temp_board = board.copy()
                 temp_board.push(move)
-                board_after_move_tokens = board_to_custom_token_sequence(temp_board)
+                board_after_move_tokens = BoardRepr.from_board(temp_board, turn_token)
 
                 record = predict_board_after_move(
                     turn_token=turn_token,
@@ -145,15 +144,14 @@ def process_pgn_file(pgn_filepath: Path, tasks: list[str]) -> Generator[dict, No
                 break
 
         processed_games += 1
-        if processed_games % 10 == 0:
-            log_info(f'Processed {processed_games} games from {pgn_filepath}...')
-
         yield from sft_records
 
     log_info(f'Finished processing {pgn_filepath}. Processed {processed_games} games.')
 
 
-def main(pgn_filepath: Path, tasks: list[str], output_filepath: Path):
+def main(
+    pgn_filepath: Path, tasks: list[str], output_filepath: Path, max_records: int | None = None
+):
     sft_data_count = 0
     output_filepath.parent.mkdir(parents=True, exist_ok=True)
 
@@ -164,8 +162,11 @@ def main(pgn_filepath: Path, tasks: list[str], output_filepath: Path):
             sft_data_count += 1
             if sft_data_count % 1000 == 0:
                 log_info(f'Generated {sft_data_count} SFT records...')
+            if max_records is not None and sft_data_count >= max_records:
+                log_info(f'Reached max records {max_records}. Stopping...')
+                break
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args.pgn_filepath, args.tasks, args.output_filepath)
+    main(args.pgn_filepath, args.tasks, args.output_filepath, args.max_records)
