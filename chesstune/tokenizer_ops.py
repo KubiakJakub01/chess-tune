@@ -2,6 +2,7 @@ from typing import Literal
 
 import chess
 import chess.pgn
+from pydantic import BaseModel, Field
 from transformers import AutoTokenizer
 
 from .utils import log_info, log_warning
@@ -17,15 +18,15 @@ NEW_TOKENS_SQUARES = [f'{f}{r}' for f in FILES for r in RANKS]
 
 # Special Game Tokens
 NEW_TOKENS_SPECIAL = [
-    'empty_sq',  # For an empty square on the board
-    'w_turn',  # Indicates white's turn
-    'b_turn',  # Indicates black's turn
-    'O-O',  # Kingside castling
-    'O-O-O',  # Queenside castling
+    'empty_sq',
+    'w_turn',
+    'b_turn',
+    'O-O',
+    'O-O-O',
 ]
 ALL_NEW_TOKENS = sorted(list(set(NEW_TOKENS_PIECES + NEW_TOKENS_SQUARES + NEW_TOKENS_SPECIAL)))
 
-# --- Helper Mappings ---
+# Helper Mappings
 PIECE_TO_TOKEN_MAP = {
     chess.Piece(chess.PAWN, chess.WHITE): 'wP',
     chess.Piece(chess.KNIGHT, chess.WHITE): 'wN',
@@ -42,7 +43,29 @@ PIECE_TO_TOKEN_MAP = {
 }
 
 
-def setup_tokenizer_with_new_tokens(model_name: str, new_tokens_list: list[str]) -> AutoTokenizer:
+class BoardRepr(BaseModel):
+    board: list[str] = Field(description='List of tokens representing the board')
+    turn: str = Field(description='Token representing the turn')
+
+    @classmethod
+    def from_board(cls, board: chess.Board, turn_token: str) -> 'BoardRepr':
+        return cls(board=board_to_custom_token_sequence(board), turn=turn_token)
+
+    def to_string(self) -> str:
+        board_str = f'```board {self.turn}\n'
+        for i, token in enumerate(self.board):
+            board_str += token
+            if (i + 1) % 8 == 0:
+                board_str += '\n'
+            else:
+                board_str += ' '
+        board_str += '```\n'
+        return board_str
+
+
+def setup_tokenizer_with_new_tokens(
+    model_name: str, new_tokens_list: list[str] = ALL_NEW_TOKENS
+) -> AutoTokenizer:
     """Loads a tokenizer and adds new tokens."""
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 
@@ -56,7 +79,8 @@ def setup_tokenizer_with_new_tokens(model_name: str, new_tokens_list: list[str])
 
 
 def board_to_custom_token_sequence(
-    board: chess.Board, representation: Literal['compact', 'verbose'] = 'compact'
+    board: chess.Board,
+    representation: Literal['compact', 'verbose'] = 'compact',
 ) -> list[str]:
     """Converts a chess.Board object to a sequence of our custom tokens."""
     assert representation in ['compact', 'verbose'], 'Invalid representation'
@@ -79,6 +103,7 @@ def board_to_custom_token_sequence(
             else:
                 token_sequence.append('empty_sq')
                 token_sequence.append(square_name)
+
     return token_sequence
 
 
