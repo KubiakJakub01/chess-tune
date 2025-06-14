@@ -23,6 +23,10 @@ NEW_TOKENS_SPECIAL = [
     'b_turn',
     'O-O',
     'O-O-O',
+    '<board>',
+    '</board>',
+    '<move>',
+    '</move>',
 ]
 ALL_NEW_TOKENS = sorted(list(set(NEW_TOKENS_PIECES + NEW_TOKENS_SQUARES + NEW_TOKENS_SPECIAL)))
 
@@ -52,15 +56,31 @@ class BoardRepr(BaseModel):
         return cls(board=board_to_custom_token_sequence(board), turn=turn_token)
 
     def to_string(self) -> str:
-        board_str = f'```board {self.turn}\n'
+        board_str = f'<board> {self.turn}\n'
         for i, token in enumerate(self.board):
             board_str += token
             if (i + 1) % 8 == 0:
                 board_str += '\n'
             else:
                 board_str += ' '
-        board_str += '```\n'
+        board_str += '</board>\n'
         return board_str
+
+
+class MoveRepr(BaseModel):
+    move: list[str] = Field(description='List of tokens representing the move')
+
+    @classmethod
+    def from_move(cls, board_before_move: chess.Board, move: chess.Move) -> 'MoveRepr':
+        return cls(move=move_to_custom_token_sequence(board_before_move, move))
+
+    def to_string(self) -> str:
+        move_str = '<move>\n'
+        for token in self.move:
+            move_str += token
+            move_str += ' '
+        move_str += '</move>\n'
+        return move_str
 
 
 def setup_tokenizer_with_new_tokens(

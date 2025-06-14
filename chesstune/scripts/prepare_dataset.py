@@ -18,7 +18,7 @@ from ..sft_tasks import (
 )
 from ..tokenizer_ops import (
     BoardRepr,
-    san_move_to_custom_token_sequence,
+    MoveRepr,
 )
 from ..utils import log_info, log_warning
 
@@ -65,7 +65,7 @@ def process_pgn_file(pgn_filepath: Path, tasks: list[str]) -> Generator[dict, No
 
             turn_token = 'w_turn' if board.turn == chess.WHITE else 'b_turn'
             board_before_move_tokens = BoardRepr.from_board(board, turn_token)
-            move_tokens = san_move_to_custom_token_sequence(board.copy(), san_move)
+            move_tokens = MoveRepr.from_move(board.copy(), move)
 
             # 1. Predict the custom token move
             if 'san_to_custom_move' in tasks:

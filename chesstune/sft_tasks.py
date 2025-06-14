@@ -3,7 +3,7 @@
 
 from collections.abc import Callable
 
-from .tokenizer_ops import BoardRepr
+from .tokenizer_ops import BoardRepr, MoveRepr
 
 # --- Task Registry Helper --------------------------------------------------
 TASK_REGISTRY: dict[str, Callable] = {}
@@ -28,7 +28,7 @@ def _register(name: str):
 def predict_custom_token_move(
     turn_token: str,
     san_move: str,
-    move_tokens: list[str],
+    move_tokens: MoveRepr,
     board_before_move_tokens: BoardRepr,
 ) -> dict:
     """
@@ -41,7 +41,7 @@ def predict_custom_token_move(
         f"The next move in Standard Algebraic Notation (SAN) is '{san_move}'. "
         f'What is this move in our custom token format?'
     )
-    output_text = f'\n```move\n{" ".join(move_tokens)}\n```\n'
+    output_text = move_tokens.to_string()
 
     return {
         'messages': [
@@ -88,7 +88,7 @@ def predict_san_move(
 def predict_board_after_move(
     turn_token: str,
     san_move: str,
-    move_tokens: list[str],
+    move_tokens: MoveRepr,
     board_before_move_tokens: BoardRepr,
     board_after_move_tokens: BoardRepr,
 ) -> dict:
@@ -97,7 +97,7 @@ def predict_board_after_move(
         "Let's play chess. The current board is represented by our custom tokens: "
         f'{board_before_move_tokens.to_string()}'
         f'It is {turn_token}. '
-        f"If the side to move plays '{san_move}' (which is {' '.join(move_tokens)} in custom tokens), "
+        f"If the side to move plays '{san_move}' (which is {move_tokens.to_string()} in custom tokens), "
         'what will the state of the board be afterwards in custom-token format?'
     )
     output_text = board_after_move_tokens.to_string()
