@@ -154,6 +154,7 @@ def main(
 ):
     sft_data_count = 0
     output_filepath.parent.mkdir(parents=True, exist_ok=True)
+    log_info(f'Starting to process {pgn_filepath} and saving to {output_filepath}...')
 
     with output_filepath.open('w', encoding='utf-8') as f_out:
         for sft_record in process_pgn_file(pgn_filepath, tasks):
