@@ -42,6 +42,13 @@ class TrainArgs(BaseModel):
     weight_decay: float = Field(0.01, description='Weight decay for regularization')
     lr_scheduler_type: str = Field('cosine', description='Learning rate scheduler type')
 
+    # Evaluation
+    use_validation_split: bool = Field(True, description='Whether to create validation split')
+    validation_split: float = Field(0.1, description='Fraction of data for validation')
+    eval_steps: int = Field(100, description='Steps between evaluations')
+    chess_eval_steps: int = Field(100, description='Steps between chess-specific evaluations')
+    num_eval_samples: int = Field(20, description='Number of chess evaluation samples')
+
     # Misc
     wandb_project: str | None = None
     logging_steps: int = 25

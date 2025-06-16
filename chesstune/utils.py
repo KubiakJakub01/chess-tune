@@ -1,6 +1,8 @@
 import logging
+from collections.abc import Callable
 
 import coloredlogs
+from torch import Tensor
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -28,3 +30,19 @@ def log_warning(*args, **kwargs):
 def log_error(*args, **kwargs):
     """Log an error message."""
     logger.error(*args, **kwargs)
+
+
+def tree_map(fn: Callable, x):
+    if isinstance(x, list):
+        x = [tree_map(fn, xi) for xi in x]
+    elif isinstance(x, tuple):
+        x = (tree_map(fn, xi) for xi in x)
+    elif isinstance(x, dict):
+        x = {k: tree_map(fn, v) for k, v in x.items()}
+    elif isinstance(x, Tensor):
+        x = fn(x)
+    return x
+
+
+def to_device(x, device):
+    return tree_map(lambda t: t.to(device), x)

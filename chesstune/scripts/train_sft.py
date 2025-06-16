@@ -11,7 +11,9 @@ from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
+from ..evaluation import setup_evaluation_for_trainer
 from ..sft_ops import check_token_embeddings_health, initialize_new_token_embeddings
+from ..tokenizer_ops import ALL_NEW_TOKENS, setup_tokenizer_with_new_tokens
 from ..train_config import TrainArgs
 from ..utils import log_error, log_info, log_warning
 
@@ -48,7 +50,8 @@ def build_model_and_tokenizer(args: TrainArgs):
 
     # Setup tokenizer with new tokens
     log_info('Setting up tokenizer with chess tokens')
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path)
+
+    tokenizer = setup_tokenizer_with_new_tokens(args.base_model, ALL_NEW_TOKENS)
 
     log_info('Loading model %s', args.base_model)
     model_kwargs: dict[str, Any] = {
@@ -108,32 +111,62 @@ def main():
     model, tokenizer = build_model_and_tokenizer(args)
     dataset = prepare_dataset(args.dataset)
 
-    trainer_cfg = SFTConfig(
-        output_dir=str(args.output_dir),
-        per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=args.grad_accum_steps,
-        learning_rate=args.learning_rate,
-        num_train_epochs=args.epochs,
-        max_seq_length=args.max_seq_length,
-        warmup_ratio=args.warmup_ratio,
-        logging_steps=args.logging_steps,
-        save_strategy=args.save_strategy,
-        fp16=args.fp16,
-        push_to_hub=args.push_to_hub,
-        logging_dir=str(args.tensorboard_dir),
-        report_to=['tensorboard'] if args.enable_tensorboard else [],
-        max_grad_norm=args.max_grad_norm,
-        weight_decay=args.weight_decay,
-        lr_scheduler_type=args.lr_scheduler_type,
-        dataloader_drop_last=True,
-        save_safetensors=True,
-        eval_strategy='no',
-        remove_unused_columns=False,
-    )
+    # Setup evaluation
+    trainer_args_dict = {
+        'output_dir': str(args.output_dir),
+        'per_device_train_batch_size': args.batch_size,
+        'per_device_eval_batch_size': args.batch_size,
+        'gradient_accumulation_steps': args.grad_accum_steps,
+        'learning_rate': args.learning_rate,
+        'num_train_epochs': args.epochs,
+        'max_seq_length': args.max_seq_length,
+        'warmup_ratio': args.warmup_ratio,
+        'logging_steps': args.logging_steps,
+        'save_strategy': args.save_strategy,
+        'fp16': args.fp16,
+        'push_to_hub': args.push_to_hub,
+        'logging_dir': str(args.tensorboard_dir),
+        'report_to': ['tensorboard'] if args.enable_tensorboard else [],
+        'max_grad_norm': args.max_grad_norm,
+        'weight_decay': args.weight_decay,
+        'lr_scheduler_type': args.lr_scheduler_type,
+        'dataloader_drop_last': True,
+        'save_safetensors': True,
+        'eval_strategy': 'no',
+        'remove_unused_columns': False,
+        'fp16_full_eval': args.fp16,
+    }
 
-    trainer = SFTTrainer(
-        model=model, processing_class=tokenizer, train_dataset=dataset, args=trainer_cfg
-    )
+    # Setup evaluation if requested
+    if args.use_validation_split:
+        trainer_args_dict, _ = setup_evaluation_for_trainer(
+            trainer_args_dict,
+            dataset,
+            use_validation_split=args.use_validation_split,
+            validation_split=args.validation_split,
+            chess_eval_steps=args.eval_steps,
+        )
+        dataset = trainer_args_dict.pop('train_dataset')  # Get updated training dataset
+        eval_dataset = trainer_args_dict.pop('eval_dataset')
+    else:
+        eval_dataset = None
+
+    trainer_cfg = SFTConfig(**trainer_args_dict)
+
+    # Create trainer with evaluation setup
+    trainer_kwargs = {
+        'model': model,
+        'processing_class': tokenizer,
+        'train_dataset': dataset,
+        'args': trainer_cfg,
+    }
+
+    # Add evaluation dataset and metrics if validation is enabled
+    if eval_dataset is not None:
+        trainer_kwargs['eval_dataset'] = eval_dataset
+        log_info('Enabled validation evaluation')
+
+    trainer = SFTTrainer(**trainer_kwargs)
 
     log_info('Starting training …')
     trainer.train()
