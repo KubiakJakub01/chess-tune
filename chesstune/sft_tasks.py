@@ -24,6 +24,12 @@ class SFTTask(BaseModel):
     instruction_text: str
     output_text: str
 
+    def to_json(self) -> dict:
+        return {
+            'instruction_text': self.instruction_text,
+            'output_text': self.output_text,
+        }
+
     def conversational_format(self) -> dict:
         return {
             'messages': [

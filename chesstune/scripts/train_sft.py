@@ -26,18 +26,8 @@ def parse_args() -> TrainArgs:
     return TrainArgs.from_json(args.config)
 
 
-def format_conversation(example: dict[str, Any], tokenizer: AutoTokenizer) -> str:
-    """Serialise a list-of-messages dict into a single prompt."""
-    assert hasattr(tokenizer, 'chat_template'), 'Tokenizer must support chat templates'
-
-    return tokenizer.apply_chat_template(
-        example['messages'], tokenize=False, add_generation_prompt=False
-    )
-
-
-def prepare_dataset(dataset_id: str, tokenizer, *, column_name: str = 'text'):
+def prepare_dataset(dataset_id: str):
     """Loads and processes the dataset into a format accepted by SFTTrainer."""
-
     if Path(dataset_id).expanduser().exists():
         log_info('Loading local JSONL dataset from %s', dataset_id)
         ds = load_dataset('json', data_files=str(dataset_id), split='train')
@@ -45,12 +35,6 @@ def prepare_dataset(dataset_id: str, tokenizer, *, column_name: str = 'text'):
         log_info('Loading dataset %s from the 🤗 Hub', dataset_id)
         ds = load_dataset(dataset_id, split='train')
 
-    log_info('Formatting conversations → flat text …')
-
-    def _map_fn(ex):
-        return {column_name: format_conversation(ex, tokenizer)}
-
-    ds = ds.map(_map_fn, remove_columns=ds.column_names, desc='formatting')
     return ds
 
 
@@ -110,7 +94,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     model, tokenizer = build_model_and_tokenizer(args)
-    dataset = prepare_dataset(args.dataset, tokenizer)
+    dataset = prepare_dataset(args.dataset)
 
     trainer_cfg = SFTConfig(
         output_dir=str(args.output_dir),

@@ -41,17 +41,17 @@ def parse_args():
         help='Tasks to include in the dataset.',
     )
     parser.add_argument(
+        '--max_records',
+        type=int,
+        default=None,
+        help='Maximum number of records to process.',
+    )
+    parser.add_argument(
         '--dataset_format',
         type=str,
         default='conversational',
         choices=['conversational', 'instruction'],
         help='Format of the dataset.',
-    )
-    parser.add_argument(
-        '--max_records',
-        type=int,
-        default=None,
-        help='Maximum number of records to process.',
     )
     return parser.parse_args()
 
@@ -185,12 +185,13 @@ def main(
     with output_filepath.open('w', encoding='utf-8') as f_out:
         for sft_record in process_pgn_file(pgn_filepath, tasks):
             if dataset_format == 'conversational':
-                json_line = json.dumps(sft_record.conversational_format(), ensure_ascii=False)
+                f_out.write(
+                    json.dumps(sft_record.conversational_format(), ensure_ascii=False) + '\n'
+                )
             elif dataset_format == 'instruction':
-                json_line = json.dumps(sft_record.instruction_format(), ensure_ascii=False)
+                f_out.write(json.dumps(sft_record.instruction_format(), ensure_ascii=False) + '\n')
             else:
                 raise ValueError(f'Invalid dataset format: {dataset_format}')
-            f_out.write(json_line + '\n')
             sft_data_count += 1
             if sft_data_count % 1000 == 0:
                 log_info('Generated %d SFT records...', sft_data_count)
