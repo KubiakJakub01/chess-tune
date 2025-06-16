@@ -3,9 +3,10 @@
 
 from collections.abc import Callable
 
+from pydantic import BaseModel
+
 from .tokenizer_ops import BoardRepr, MoveRepr
 
-# --- Task Registry Helper --------------------------------------------------
 TASK_REGISTRY: dict[str, Callable] = {}
 
 
@@ -19,9 +20,23 @@ def _register(name: str):
     return decorator
 
 
-# ---------------------------------------------------------------------------
-# 1. SAN -> Custom-token move
-# ---------------------------------------------------------------------------
+class SFTTask(BaseModel):
+    instruction_text: str
+    output_text: str
+
+    def conversational_format(self) -> dict:
+        return {
+            'messages': [
+                {'role': 'user', 'content': self.instruction_text},
+                {'role': 'assistant', 'content': self.output_text},
+            ]
+        }
+
+    def instruction_format(self) -> dict:
+        return {
+            'prompt': self.instruction_text,
+            'completion': self.output_text,
+        }
 
 
 @_register('san_to_custom_move')
@@ -30,7 +45,7 @@ def predict_custom_token_move(
     san_move: str,
     move_tokens: MoveRepr,
     board_before_move_tokens: BoardRepr,
-) -> dict:
+) -> SFTTask:
     """
     Predicts the custom token move for a given board and move.
     """
@@ -43,17 +58,7 @@ def predict_custom_token_move(
     )
     output_text = move_tokens.to_string()
 
-    return {
-        'messages': [
-            {'role': 'user', 'content': instruction_text},
-            {'role': 'assistant', 'content': output_text},
-        ]
-    }
-
-
-# ---------------------------------------------------------------------------
-# 2. Board tokens -> SAN move (reverse mapping)
-# ---------------------------------------------------------------------------
+    return SFTTask(instruction_text=instruction_text, output_text=output_text)
 
 
 @_register('board_to_san_move')
@@ -61,7 +66,7 @@ def predict_san_move(
     turn_token: str,
     san_move: str,
     board_before_move_tokens: BoardRepr,
-) -> dict:
+) -> SFTTask:
     """Prompt that asks the model to output the SAN move given custom board tokens."""
     instruction_text = (
         'Analyze the following chess board state, represented by our custom tokens: '
@@ -71,17 +76,7 @@ def predict_san_move(
     )
     output_text = san_move
 
-    return {
-        'messages': [
-            {'role': 'user', 'content': instruction_text},
-            {'role': 'assistant', 'content': output_text},
-        ]
-    }
-
-
-# ---------------------------------------------------------------------------
-# 3. Board + Move -> Resulting board tokens
-# ---------------------------------------------------------------------------
+    return SFTTask(instruction_text=instruction_text, output_text=output_text)
 
 
 @_register('board_and_move_to_board')
@@ -91,7 +86,7 @@ def predict_board_after_move(
     move_tokens: MoveRepr,
     board_before_move_tokens: BoardRepr,
     board_after_move_tokens: BoardRepr,
-) -> dict:
+) -> SFTTask:
     """Prompt asking model to output board tokens after a given move."""
     instruction_text = (
         "Let's play chess. The current board is represented by our custom tokens: "
@@ -102,24 +97,14 @@ def predict_board_after_move(
     )
     output_text = board_after_move_tokens.to_string()
 
-    return {
-        'messages': [
-            {'role': 'user', 'content': instruction_text},
-            {'role': 'assistant', 'content': output_text},
-        ]
-    }
-
-
-# ---------------------------------------------------------------------------
-# 4. Board tokens <-> FEN conversion tasks
-# ---------------------------------------------------------------------------
+    return SFTTask(instruction_text=instruction_text, output_text=output_text)
 
 
 @_register('board_to_fen')
 def board_to_fen_conversion(
     board_before_move_tokens: BoardRepr,
     fen_before: str,
-) -> dict:
+) -> SFTTask:
     """Convert custom-token board into standard FEN string."""
     instruction_text = (
         'Convert the following chess position from our custom-token representation to FEN notation: '
@@ -127,19 +112,14 @@ def board_to_fen_conversion(
     )
     output_text = fen_before
 
-    return {
-        'messages': [
-            {'role': 'user', 'content': instruction_text},
-            {'role': 'assistant', 'content': output_text},
-        ]
-    }
+    return SFTTask(instruction_text=instruction_text, output_text=output_text)
 
 
 @_register('fen_to_board')
 def fen_to_board_conversion(
     fen_before: str,
     board_before_move_tokens: BoardRepr,
-) -> dict:
+) -> SFTTask:
     """Convert FEN to custom tokens."""
     instruction_text = (
         'The following FEN describes a chess position. Convert it to our custom-token representation: '
@@ -147,17 +127,7 @@ def fen_to_board_conversion(
     )
     output_text = board_before_move_tokens.to_string()
 
-    return {
-        'messages': [
-            {'role': 'user', 'content': instruction_text},
-            {'role': 'assistant', 'content': output_text},
-        ]
-    }
-
-
-# ---------------------------------------------------------------------------
-# 5. Square-level query task
-# ---------------------------------------------------------------------------
+    return SFTTask(instruction_text=instruction_text, output_text=output_text)
 
 
 @_register('square_query')
@@ -165,7 +135,7 @@ def square_query_task(
     board_before_move_tokens: BoardRepr,
     square_name: str,
     answer_token: str,
-) -> dict:
+) -> SFTTask:
     """Ask which piece (or empty) occupies a particular square."""
     instruction_text = (
         'Given the chess board represented with our custom tokens: '
@@ -174,9 +144,4 @@ def square_query_task(
     )
     output_text = answer_token
 
-    return {
-        'messages': [
-            {'role': 'user', 'content': instruction_text},
-            {'role': 'assistant', 'content': output_text},
-        ]
-    }
+    return SFTTask(instruction_text=instruction_text, output_text=output_text)
