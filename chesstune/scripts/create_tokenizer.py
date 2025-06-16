@@ -29,6 +29,7 @@ def main(model_name: str, output_filepath: Path):
     tokenizer = setup_tokenizer_with_new_tokens(model_name, ALL_NEW_TOKENS)
     log_info(f'Saving tokenizer to {output_filepath}')
     output_filepath.mkdir(parents=True, exist_ok=True)
+    assert hasattr(tokenizer, 'save_pretrained'), 'Tokenizer must have a save_pretrained method'
     tokenizer.save_pretrained(output_filepath)
 
 

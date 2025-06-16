@@ -11,12 +11,13 @@ def check_token_embeddings_health(model: AutoModelForCausalLM, tokenizer: AutoTo
     Check the health of token embeddings, especially new tokens.
     Reports statistics that can help identify training instabilities.
     """
+    assert hasattr(model, 'get_input_embeddings'), 'Model must have an input embedding layer'
     embedding_layer = model.get_input_embeddings()
     embeddings = embedding_layer.weight.data
 
     # Basic statistics
     log_info('=== Token Embedding Health Check ===')
-    log_info('Total vocabulary size: %d', len(tokenizer))
+    log_info('Total vocabulary size: %d', len(tokenizer))  # type: ignore
     log_info('Embedding dimension: %d', embeddings.shape[1])
 
     # Check for NaN or infinite values
@@ -79,14 +80,15 @@ def initialize_new_token_embeddings(
     This function initializes new token embeddings using the mean and std of existing
     embeddings, which is much more stable than random initialization.
     """
-    if len(tokenizer) <= original_vocab_size:
+    if len(tokenizer) <= original_vocab_size:  # type: ignore
         log_info('No new tokens to initialize')
         return
 
-    num_new_tokens = len(tokenizer) - original_vocab_size
+    num_new_tokens = len(tokenizer) - original_vocab_size  # type: ignore
     log_info('Initializing %d new token embeddings', num_new_tokens)
 
     # Get the embedding layer
+    assert hasattr(model, 'get_input_embeddings'), 'Model must have an input embedding layer'
     embedding_layer = model.get_input_embeddings()
 
     # Calculate mean and std of existing embeddings
@@ -95,8 +97,8 @@ def initialize_new_token_embeddings(
     std_embedding = existing_embeddings.std(dim=0)
 
     # Initialize new token embeddings with similar statistics
-    with torch.no_grad():
-        for i in range(original_vocab_size, len(tokenizer)):
+    with torch.inference_mode():
+        for i in range(original_vocab_size, len(tokenizer)):  # type: ignore
             # Use normal distribution with mean and std from existing embeddings
             new_embedding = torch.normal(
                 mean_embedding, std_embedding * 0.1
