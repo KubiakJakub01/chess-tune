@@ -26,6 +26,7 @@ class TrainArgs(BaseModel):
     grad_accum_steps: int = 16
     learning_rate: float = 2e-5
     max_seq_length: int = 2048
+    warmup_ratio: float = 0.03
 
     # LoRA
     use_lora: bool = False
@@ -38,6 +39,16 @@ class TrainArgs(BaseModel):
 
     # Misc
     wandb_project: str | None = None
+    logging_steps: int = 25
+    save_strategy: str = 'epoch'
+    fp16: bool = True
+    push_to_hub: bool = False
+
+    # TensorBoard / tracking
+    enable_tensorboard: bool = True
+    tensorboard_dir: Path = Field(
+        Path('runs/tensorboard'), description='Directory for TensorBoard logs'
+    )
 
     @classmethod
     def from_json(cls, path: str | Path) -> 'TrainArgs':
