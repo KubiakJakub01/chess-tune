@@ -27,6 +27,7 @@ class TrainArgs(BaseModel):
     learning_rate: float = 2e-5
     max_seq_length: int = 2048
     warmup_ratio: float = 0.03
+    max_grad_norm: float = Field(1.0, description='Maximum gradient norm for clipping')
 
     # LoRA
     use_lora: bool = False
@@ -36,6 +37,10 @@ class TrainArgs(BaseModel):
 
     # Memory / precision
     load_in_4bit: bool = False
+
+    # Training stability
+    weight_decay: float = Field(0.01, description='Weight decay for regularization')
+    lr_scheduler_type: str = Field('cosine', description='Learning rate scheduler type')
 
     # Misc
     wandb_project: str | None = None
