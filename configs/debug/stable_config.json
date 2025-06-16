@@ -1,0 +1,22 @@
+{
+    "dataset": "data/sft/sanity.jsonl",
+    "output_dir": "models/sft/Qwen/Qwen3-0.6B/stable",
+    "tensorboard_dir": "runs/tensorboard/Qwen/Qwen3-0.6B/stable",
+    "base_model": "Qwen/Qwen3-0.6B",
+    "tokenizer_path": "models/tokenizer/Qwen/Qwen3-0.6B",
+    "epochs": 1,
+    "batch_size": 1,
+    "grad_accum_steps": 64,
+    "learning_rate": 1e-6,
+    "max_seq_length": 1024,
+    "warmup_ratio": 0.2,
+    "max_grad_norm": 0.5,
+    "weight_decay": 0.1,
+    "lr_scheduler_type": "linear",
+    "fp16": false,
+    "use_lora": true,
+    "lora_r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.2,
+    "logging_steps": 5
+} 

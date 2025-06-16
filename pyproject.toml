@@ -5,16 +5,34 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "chess>=1.11.2",
+    "coloredlogs>=15.0.1",
+    "datasets>=3.6.0",
     "numpy>=2.3.0",
+    "peft>=0.15.2",
+    "pydantic>=2.11.6",
+    "standard-imghdr>=3.13.0",
+    "tensorboard>=2.19.0",
+    "torch>=2.7.1",
+    "torchvision>=0.22.1",
+    "tqdm>=4.67.1",
+    "transformers[torch]>=4.51.3",
+    "trl>=0.18.1",
 ]
 
 [dependency-groups]
 dev = [
+    "ipykernel>=6.29.5",
     "mypy==1.16.0",
     "pre-commit==4.2.0",
     "pylint==3.3.7",
     "ruff==0.11.13",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
 
 [tool.pylint]
 max-line-length = 100

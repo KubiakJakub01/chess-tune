@@ -1,5 +1,9 @@
 # Project specific
 .cursor/*
+data/*
+models/*
+debug/*
+runs/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
