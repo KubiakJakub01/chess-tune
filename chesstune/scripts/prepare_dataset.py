@@ -9,6 +9,7 @@ import chess.pgn
 
 from ..sft_tasks import (
     TASK_REGISTRY,
+    SFTTask,
     board_to_fen_conversion,
     fen_to_board_conversion,
     predict_board_after_move,
@@ -17,6 +18,9 @@ from ..sft_tasks import (
     square_query_task,
 )
 from ..tokenizer_ops import (
+    BLACK_TURN_TOKEN,
+    EMPTY_SQUARE_TOKEN,
+    WHITE_TURN_TOKEN,
     BoardRepr,
     MoveRepr,
 )
@@ -25,15 +29,30 @@ from ..utils import log_info, log_warning
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--pgn_filepath', type=Path, required=True)
-    parser.add_argument('--output_filepath', type=Path, required=True)
+    parser.add_argument('--pgn_filepath', type=Path, required=True, help='Path to the PGN file.')
+    parser.add_argument(
+        '--output_filepath', type=Path, required=True, help='Path to the output file.'
+    )
     parser.add_argument(
         '--tasks',
         choices=TASK_REGISTRY.keys(),
         default=list(TASK_REGISTRY.keys()),
         nargs='+',
+        help='Tasks to include in the dataset.',
     )
-    parser.add_argument('--max_records', type=int, default=None)
+    parser.add_argument(
+        '--dataset_format',
+        type=str,
+        default='conversational',
+        choices=['conversational', 'instruction'],
+        help='Format of the dataset.',
+    )
+    parser.add_argument(
+        '--max_records',
+        type=int,
+        default=None,
+        help='Maximum number of records to process.',
+    )
     return parser.parse_args()
 
 
@@ -49,7 +68,10 @@ def parse_pgn_file(pgn_filepath: Path) -> Generator[chess.pgn.Game, None, None]:
             yield game
 
 
-def process_pgn_file(pgn_filepath: Path, tasks: list[str]) -> Generator[dict, None, None]:
+def process_pgn_file(
+    pgn_filepath: Path,
+    tasks: list[str],
+) -> Generator[SFTTask, None, None]:
     """
     Processes a single PGN file and yields training instances.
     Each instance will be a dictionary for SFT.
@@ -63,7 +85,7 @@ def process_pgn_file(pgn_filepath: Path, tasks: list[str]) -> Generator[dict, No
             move = node.move
             san_move = board.san(move)
 
-            turn_token = 'w_turn' if board.turn == chess.WHITE else 'b_turn'
+            turn_token = WHITE_TURN_TOKEN if board.turn == chess.WHITE else BLACK_TURN_TOKEN
             board_before_move_tokens = BoardRepr.from_board(board, turn_token)
             move_tokens = MoveRepr.from_move(board.copy(), move)
 
@@ -128,7 +150,7 @@ def process_pgn_file(pgn_filepath: Path, tasks: list[str]) -> Generator[dict, No
                         'w' if piece_at_square.color == chess.WHITE else 'b'
                     ) + piece_at_square.symbol().upper()
                 else:
-                    answer_token = 'empty_sq'
+                    answer_token = EMPTY_SQUARE_TOKEN
 
                 record = square_query_task(
                     board_before_move_tokens=board_before_move_tokens,
@@ -140,34 +162,43 @@ def process_pgn_file(pgn_filepath: Path, tasks: list[str]) -> Generator[dict, No
             try:
                 board.push(move)
             except Exception as e:
-                log_warning(f'Error pushing move {move} in game from {pgn_filepath}: {e}')
+                log_warning('Error pushing move %s in game from %s: %s', move, pgn_filepath, e)
                 break
 
         processed_games += 1
         yield from sft_records
 
-    log_info(f'Finished processing {pgn_filepath}. Processed {processed_games} games.')
+    log_info('Finished processing %s. Processed %d games.', pgn_filepath, processed_games)
 
 
 def main(
-    pgn_filepath: Path, tasks: list[str], output_filepath: Path, max_records: int | None = None
+    pgn_filepath: Path,
+    tasks: list[str],
+    output_filepath: Path,
+    max_records: int | None,
+    dataset_format: str,
 ):
     sft_data_count = 0
     output_filepath.parent.mkdir(parents=True, exist_ok=True)
-    log_info(f'Starting to process {pgn_filepath} and saving to {output_filepath}...')
+    log_info('Starting to process %s and saving to %s...', pgn_filepath, output_filepath)
 
     with output_filepath.open('w', encoding='utf-8') as f_out:
         for sft_record in process_pgn_file(pgn_filepath, tasks):
-            json_line = json.dumps(sft_record, ensure_ascii=False)
+            if dataset_format == 'conversational':
+                json_line = json.dumps(sft_record.conversational_format(), ensure_ascii=False)
+            elif dataset_format == 'instruction':
+                json_line = json.dumps(sft_record.instruction_format(), ensure_ascii=False)
+            else:
+                raise ValueError(f'Invalid dataset format: {dataset_format}')
             f_out.write(json_line + '\n')
             sft_data_count += 1
             if sft_data_count % 1000 == 0:
-                log_info(f'Generated {sft_data_count} SFT records...')
+                log_info('Generated %d SFT records...', sft_data_count)
             if max_records is not None and sft_data_count >= max_records:
-                log_info(f'Reached max records {max_records}. Stopping...')
+                log_info('Reached max records %d. Stopping...', max_records)
                 break
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args.pgn_filepath, args.tasks, args.output_filepath, args.max_records)
+    main(args.pgn_filepath, args.tasks, args.output_filepath, args.max_records, args.dataset_format)

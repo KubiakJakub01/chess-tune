@@ -17,16 +17,26 @@ RANKS = ['1', '2', '3', '4', '5', '6', '7', '8']
 NEW_TOKENS_SQUARES = [f'{f}{r}' for f in FILES for r in RANKS]
 
 # Special Game Tokens
+EMPTY_SQUARE_TOKEN = 'empty_sq'
+WHITE_TURN_TOKEN = 'w_turn'
+BLACK_TURN_TOKEN = 'b_turn'
+SHORT_CASTLING_TOKEN = 'O-O'
+LONG_CASTLING_TOKEN = 'O-O-O'
+BOARD_TOKEN = '<board>'
+BOARD_END_TOKEN = '</board>'
+MOVE_TOKEN = '<move>'
+MOVE_END_TOKEN = '</move>'
+
 NEW_TOKENS_SPECIAL = [
-    'empty_sq',
-    'w_turn',
-    'b_turn',
-    'O-O',
-    'O-O-O',
-    '<board>',
-    '</board>',
-    '<move>',
-    '</move>',
+    EMPTY_SQUARE_TOKEN,
+    WHITE_TURN_TOKEN,
+    BLACK_TURN_TOKEN,
+    SHORT_CASTLING_TOKEN,
+    LONG_CASTLING_TOKEN,
+    BOARD_TOKEN,
+    BOARD_END_TOKEN,
+    MOVE_TOKEN,
+    MOVE_END_TOKEN,
 ]
 ALL_NEW_TOKENS = sorted(list(set(NEW_TOKENS_PIECES + NEW_TOKENS_SQUARES + NEW_TOKENS_SPECIAL)))
 
@@ -56,14 +66,14 @@ class BoardRepr(BaseModel):
         return cls(board=board_to_custom_token_sequence(board), turn=turn_token)
 
     def to_string(self) -> str:
-        board_str = f'<board> {self.turn}\n'
+        board_str = f'{BOARD_TOKEN} {self.turn}\n'
         for i, token in enumerate(self.board):
             board_str += token
             if (i + 1) % 8 == 0:
                 board_str += '\n'
             else:
                 board_str += ' '
-        board_str += '</board>\n'
+        board_str += f'{BOARD_END_TOKEN}\n'
         return board_str
 
 
@@ -75,11 +85,11 @@ class MoveRepr(BaseModel):
         return cls(move=move_to_custom_token_sequence(board_before_move, move))
 
     def to_string(self) -> str:
-        move_str = '<move>\n'
+        move_str = f'{MOVE_TOKEN}\n'
         for token in self.move:
             move_str += token
             move_str += ' '
-        move_str += '</move>\n'
+        move_str += f'{MOVE_END_TOKEN}\n'
         return move_str
 
 
@@ -93,8 +103,8 @@ def setup_tokenizer_with_new_tokens(
         tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 
     num_added_toks = tokenizer.add_tokens(new_tokens_list, special_tokens=False)
-    log_info(f'Added {num_added_toks} new tokens.')
-    log_info(f'Vocabulary size after adding tokens: {len(tokenizer)}')
+    log_info('Added %d new tokens.', num_added_toks)
+    log_info('Vocabulary size after adding tokens: %d', len(tokenizer))
     return tokenizer
 
 
@@ -111,7 +121,7 @@ def board_to_custom_token_sequence(
             if piece:
                 token_sequence.append(PIECE_TO_TOKEN_MAP[piece])
             else:
-                token_sequence.append('empty_sq')
+                token_sequence.append(EMPTY_SQUARE_TOKEN)
 
     elif representation == 'verbose':
         for square_index in chess.SQUARES:
@@ -121,7 +131,7 @@ def board_to_custom_token_sequence(
                 token_sequence.append(PIECE_TO_TOKEN_MAP[piece])
                 token_sequence.append(square_name)
             else:
-                token_sequence.append('empty_sq')
+                token_sequence.append(EMPTY_SQUARE_TOKEN)
                 token_sequence.append(square_name)
 
     return token_sequence
@@ -156,13 +166,13 @@ def san_move_to_custom_token_sequence(
     This is often more robust for castling.
     """
     if san_move_str == 'O-O':
-        return ['O-O']
+        return [SHORT_CASTLING_TOKEN]
     if san_move_str == 'O-O-O':
-        return ['O-O-O']
+        return [LONG_CASTLING_TOKEN]
 
     try:
         move = board_before_move.parse_san(san_move_str)
         return move_to_custom_token_sequence(board_before_move, move)
     except ValueError as e:
-        log_warning(f"Warning: Could not parse SAN move '{san_move_str}': {e}")
+        log_warning('Warning: Could not parse SAN move "%s": %s', san_move_str, e)
         return [f'<parse_error_{san_move_str.replace(" ", "_")}>']
