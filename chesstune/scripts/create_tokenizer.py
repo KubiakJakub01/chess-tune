@@ -7,8 +7,20 @@ from ..utils import log_info
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', type=str, required=True)
-    parser.add_argument('--output_filepath', type=Path, required=True)
+    parser.add_argument(
+        '-m',
+        '--model_name',
+        type=str,
+        required=True,
+        help='Model name to create tokenizer for',
+    )
+    parser.add_argument(
+        '-o',
+        '--output_filepath',
+        type=Path,
+        required=True,
+        help='Path to save tokenizer',
+    )
     return parser.parse_args()
 
 
