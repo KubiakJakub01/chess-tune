@@ -11,6 +11,7 @@ from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
+from ..sft_ops import check_token_embeddings_health, initialize_new_token_embeddings
 from ..train_config import TrainArgs
 from ..utils import log_error, log_info, log_warning
 
@@ -41,10 +42,13 @@ def prepare_dataset(dataset_id: str):
 def build_model_and_tokenizer(args: TrainArgs):
     """Loads the base checkpoint and applies optional LoRA adapters."""
 
-    log_info('Loading tokenizer for %s', args.tokenizer_path)
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, add_eos_token=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    log_info('Loading base tokenizer for %s', args.base_model)
+    base_tokenizer = AutoTokenizer.from_pretrained(args.base_model, add_eos_token=True)
+    original_vocab_size = len(base_tokenizer)
+
+    # Setup tokenizer with new tokens
+    log_info('Setting up tokenizer with chess tokens')
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path)
 
     log_info('Loading model %s', args.base_model)
     model_kwargs: dict[str, Any] = {
@@ -55,7 +59,15 @@ def build_model_and_tokenizer(args: TrainArgs):
         model_kwargs['load_in_4bit'] = True
 
     model = AutoModelForCausalLM.from_pretrained(args.base_model, **model_kwargs)
+
+    # Resize token embeddings
     model.resize_token_embeddings(len(tokenizer))
+
+    # Properly initialize new token embeddings
+    initialize_new_token_embeddings(model, tokenizer, original_vocab_size)
+
+    # Check embedding health after initialization
+    check_token_embeddings_health(model, tokenizer)
 
     if args.use_lora:
         log_info(
@@ -110,6 +122,13 @@ def main():
         push_to_hub=args.push_to_hub,
         logging_dir=str(args.tensorboard_dir),
         report_to=['tensorboard'] if args.enable_tensorboard else [],
+        max_grad_norm=args.max_grad_norm,
+        weight_decay=args.weight_decay,
+        lr_scheduler_type=args.lr_scheduler_type,
+        dataloader_drop_last=True,
+        save_safetensors=True,
+        eval_strategy='no',
+        remove_unused_columns=False,
     )
 
     trainer = SFTTrainer(
