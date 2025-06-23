@@ -11,10 +11,10 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import SFTConfig, SFTTrainer
 
-from ..evaluation import setup_evaluation_for_trainer
+from ..callbacks import LogTextSamplesCallback
+from ..config import TrainArgs
 from ..sft_ops import check_token_embeddings_health, initialize_new_token_embeddings
 from ..tokenizer_ops import ALL_NEW_TOKENS, setup_tokenizer_with_new_tokens
-from ..train_config import TrainArgs
 from ..utils import log_error, log_info, log_warning
 
 
@@ -29,7 +29,7 @@ def parse_args() -> TrainArgs:
     return TrainArgs.from_json(args.config)
 
 
-def prepare_dataset(dataset_id: str):
+def prepare_dataset(dataset_id: str, args: TrainArgs):
     """Loads and processes the dataset into a format accepted by SFTTrainer."""
     if Path(dataset_id).expanduser().exists():
         log_info('Loading local JSONL dataset from %s', dataset_id)
@@ -38,7 +38,10 @@ def prepare_dataset(dataset_id: str):
         log_info('Loading dataset %s from the 🤗 Hub', dataset_id)
         ds = load_dataset(dataset_id, split='train', streaming=True)
 
-    return ds
+    val_dataset = ds.take(args.validation_size)
+    train_dataset = ds.skip(args.validation_size)
+
+    return train_dataset, val_dataset
 
 
 def build_model_and_tokenizer(args: TrainArgs):
@@ -123,67 +126,23 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     model, tokenizer = build_model_and_tokenizer(args)
-    dataset = prepare_dataset(args.dataset)
+    train_ds, val_ds = prepare_dataset(args.dataset, args)
+    trainer_cfg = SFTConfig(**args.trainer_args)
 
-    # Setup evaluation
-    trainer_args_dict = {
-        'output_dir': str(args.output_dir),
-        'per_device_train_batch_size': args.batch_size,
-        'per_device_eval_batch_size': args.batch_size,
-        'gradient_accumulation_steps': args.grad_accum_steps,
-        'learning_rate': args.learning_rate,
-        'max_steps': args.num_train_steps,
-        'max_seq_length': args.max_seq_length,
-        'warmup_ratio': args.warmup_ratio,
-        'logging_steps': args.logging_steps,
-        'save_strategy': 'steps',
-        'push_to_hub': args.push_to_hub,
-        'logging_dir': str(args.tensorboard_dir),
-        'report_to': ['tensorboard'] if args.enable_tensorboard else [],
-        'max_grad_norm': args.max_grad_norm,
-        'weight_decay': args.weight_decay,
-        'lr_scheduler_type': args.lr_scheduler_type,
-        'dataloader_drop_last': True,
-        'save_safetensors': True,
-        'eval_strategy': 'no',
-        'remove_unused_columns': False,
-        'include_tokens_per_second': True,
-        'bf16': args.bf16,
-        'bf16_full_eval': args.bf16,
-        'fp16': args.fp16,
-        'fp16_full_eval': args.fp16,
-    }
-
-    # Setup evaluation if requested
-    if args.use_validation_split:
-        trainer_args_dict, _ = setup_evaluation_for_trainer(
-            trainer_args_dict,
-            dataset,
-            use_validation_split=args.use_validation_split,
-            validation_size=args.validation_size,
-            chess_eval_steps=args.eval_steps,
-        )
-        dataset = trainer_args_dict.pop('train_dataset')
-        eval_dataset = trainer_args_dict.pop('eval_dataset')
-    else:
-        eval_dataset = None
-
-    trainer_cfg = SFTConfig(**trainer_args_dict)
-
-    # Create trainer with evaluation setup
     trainer_kwargs = {
         'model': model,
         'processing_class': tokenizer,
-        'train_dataset': dataset,
+        'train_dataset': train_ds,
+        'eval_dataset': val_ds,
         'args': trainer_cfg,
     }
 
-    # Add evaluation dataset and metrics if validation is enabled
-    if eval_dataset is not None:
-        trainer_kwargs['eval_dataset'] = eval_dataset
-        log_info('Enabled validation evaluation')
-
     trainer = SFTTrainer(**trainer_kwargs)
+    text_generation_callback = LogTextSamplesCallback(
+        eval_dataset=val_ds,
+        args=args,
+    )
+    trainer.add_callback(text_generation_callback)
 
     log_info('Starting training …')
     trainer.train()
