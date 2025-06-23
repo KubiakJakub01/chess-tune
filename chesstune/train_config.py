@@ -43,7 +43,7 @@ class TrainArgs(BaseModel):
 
     # Training stability
     weight_decay: float = Field(0.01, description='Weight decay for regularization')
-    lr_scheduler_type: str = Field('cosine', description='Learning rate scheduler type')
+    lr_scheduler_type: str = 'constant'
 
     # Evaluation
     use_validation_split: bool = Field(True, description='Whether to create validation split')
@@ -59,7 +59,9 @@ class TrainArgs(BaseModel):
     fp16: bool = False
     bf16: bool = True
     push_to_hub: bool = False
-    attn_implementation: str = 'flash_attention_2'
+    attn_implementation: str | None = 'flash_attention_2'
+    num_samples_to_log: int = 1
+    generation_max_new_tokens: int = 1000
 
     # TensorBoard / tracking
     enable_tensorboard: bool = True
