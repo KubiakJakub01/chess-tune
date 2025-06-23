@@ -8,6 +8,7 @@ dependencies = [
     "chess>=1.11.2",
     "coloredlogs>=15.0.1",
     "datasets>=3.6.0",
+    "flash-attn>=2.8.0.post2",
     "numpy>=2.3.0",
     "peft>=0.15.2",
     "pydantic>=2.11.6",
@@ -33,6 +34,9 @@ dev = [
 name = "pytorch-cu126"
 url = "https://download.pytorch.org/whl/cu126"
 explicit = true
+
+[tool.uv]
+no-build-isolation-package = ["flash-attn"]
 
 [tool.pylint]
 max-line-length = 100
