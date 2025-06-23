@@ -21,7 +21,7 @@ class TrainArgs(BaseModel):
     )
 
     # Optimisation
-    epochs: int = 3
+    num_train_steps: int = 10000
     batch_size: int = 2  # per device
     grad_accum_steps: int = 16
     learning_rate: float = 2e-5
@@ -36,7 +36,10 @@ class TrainArgs(BaseModel):
     lora_dropout: float = 0.05
 
     # Memory / precision
+    load_in_8bit: bool = False
     load_in_4bit: bool = False
+    bnb_4bit_quant_type: str = 'nf4'
+    bnb_4bit_use_double_quant: bool = True
 
     # Training stability
     weight_decay: float = Field(0.01, description='Weight decay for regularization')
@@ -44,7 +47,7 @@ class TrainArgs(BaseModel):
 
     # Evaluation
     use_validation_split: bool = Field(True, description='Whether to create validation split')
-    validation_split: float = Field(0.1, description='Fraction of data for validation')
+    validation_size: int = Field(100, description='Size of validation split')
     eval_steps: int = Field(100, description='Steps between evaluations')
     chess_eval_steps: int = Field(100, description='Steps between chess-specific evaluations')
     num_eval_samples: int = Field(20, description='Number of chess evaluation samples')
@@ -53,8 +56,10 @@ class TrainArgs(BaseModel):
     wandb_project: str | None = None
     logging_steps: int = 25
     save_strategy: str = 'epoch'
-    fp16: bool = True
+    fp16: bool = False
+    bf16: bool = True
     push_to_hub: bool = False
+    attn_implementation: str = 'flash_attention_2'
 
     # TensorBoard / tracking
     enable_tensorboard: bool = True

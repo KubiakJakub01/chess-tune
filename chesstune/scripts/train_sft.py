@@ -7,8 +7,8 @@ from typing import Any
 
 import torch
 from datasets import load_dataset
-from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from trl import SFTConfig, SFTTrainer
 
 from ..evaluation import setup_evaluation_for_trainer
@@ -33,10 +33,10 @@ def prepare_dataset(dataset_id: str):
     """Loads and processes the dataset into a format accepted by SFTTrainer."""
     if Path(dataset_id).expanduser().exists():
         log_info('Loading local JSONL dataset from %s', dataset_id)
-        ds = load_dataset('json', data_files=str(dataset_id), split='train')
+        ds = load_dataset('json', data_files=str(dataset_id), split='train', streaming=True)
     else:
         log_info('Loading dataset %s from the 🤗 Hub', dataset_id)
-        ds = load_dataset(dataset_id, split='train')
+        ds = load_dataset(dataset_id, split='train', streaming=True)
 
     return ds
 
@@ -54,14 +54,28 @@ def build_model_and_tokenizer(args: TrainArgs):
     tokenizer = setup_tokenizer_with_new_tokens(args.base_model, ALL_NEW_TOKENS)
 
     log_info('Loading model %s', args.base_model)
-    model_kwargs: dict[str, Any] = {
-        'torch_dtype': torch.float16,
-        'device_map': 'auto',
-    }
+    compute_dtype = torch.bfloat16 if args.bf16 else torch.float16
+    bnb_config = None
     if args.load_in_4bit:
-        model_kwargs['load_in_4bit'] = True
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=args.load_in_4bit,
+            bnb_4bit_quant_type=args.bnb_4bit_quant_type,
+            compute_dtype=compute_dtype,
+            bnb_4bit_use_double_quant=args.bnb_4bit_use_double_quant,
+        )
+
+    model_kwargs: dict[str, Any] = {
+        'load_in_8bit': args.load_in_8bit,
+        'quantization_config': bnb_config,
+        'torch_dtype': compute_dtype,
+        'device_map': 'auto',
+        'attn_implementation': args.attn_implementation,
+    }
 
     model = AutoModelForCausalLM.from_pretrained(args.base_model, **model_kwargs)
+
+    if args.load_in_4bit or args.load_in_8bit:
+        model = prepare_model_for_kbit_training(model)
 
     # Resize token embeddings
     model.resize_token_embeddings(len(tokenizer))
@@ -118,12 +132,11 @@ def main():
         'per_device_eval_batch_size': args.batch_size,
         'gradient_accumulation_steps': args.grad_accum_steps,
         'learning_rate': args.learning_rate,
-        'num_train_epochs': args.epochs,
+        'max_steps': args.num_train_steps,
         'max_seq_length': args.max_seq_length,
         'warmup_ratio': args.warmup_ratio,
         'logging_steps': args.logging_steps,
-        'save_strategy': args.save_strategy,
-        'fp16': args.fp16,
+        'save_strategy': 'steps',
         'push_to_hub': args.push_to_hub,
         'logging_dir': str(args.tensorboard_dir),
         'report_to': ['tensorboard'] if args.enable_tensorboard else [],
@@ -134,6 +147,10 @@ def main():
         'save_safetensors': True,
         'eval_strategy': 'no',
         'remove_unused_columns': False,
+        'include_tokens_per_second': True,
+        'bf16': args.bf16,
+        'bf16_full_eval': args.bf16,
+        'fp16': args.fp16,
         'fp16_full_eval': args.fp16,
     }
 
@@ -143,10 +160,10 @@ def main():
             trainer_args_dict,
             dataset,
             use_validation_split=args.use_validation_split,
-            validation_split=args.validation_split,
+            validation_size=args.validation_size,
             chess_eval_steps=args.eval_steps,
         )
-        dataset = trainer_args_dict.pop('train_dataset')  # Get updated training dataset
+        dataset = trainer_args_dict.pop('train_dataset')
         eval_dataset = trainer_args_dict.pop('eval_dataset')
     else:
         eval_dataset = None
