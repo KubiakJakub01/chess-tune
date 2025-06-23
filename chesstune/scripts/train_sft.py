@@ -3,12 +3,10 @@
 import argparse
 import os
 from pathlib import Path
-from typing import Any
 
-import torch
-from datasets import load_dataset
+from datasets import Dataset, load_dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
 from ..callbacks import LogTextSamplesCallback
@@ -29,14 +27,14 @@ def parse_args() -> TrainArgs:
     return TrainArgs.from_json(args.config)
 
 
-def prepare_dataset(dataset_id: str, args: TrainArgs):
+def prepare_dataset(args: TrainArgs) -> tuple[Dataset, Dataset]:
     """Loads and processes the dataset into a format accepted by SFTTrainer."""
-    if Path(dataset_id).expanduser().exists():
-        log_info('Loading local JSONL dataset from %s', dataset_id)
-        ds = load_dataset('json', data_files=str(dataset_id), split='train', streaming=True)
+    if Path(args.dataset).expanduser().exists():
+        log_info('Loading local JSONL dataset from %s', args.dataset)
+        ds = load_dataset('json', data_files=str(args.dataset), split='train', streaming=True)
     else:
-        log_info('Loading dataset %s from the 🤗 Hub', dataset_id)
-        ds = load_dataset(dataset_id, split='train', streaming=True)
+        log_info('Loading dataset %s from the 🤗 Hub', args.dataset)
+        ds = load_dataset(args.dataset, split='train', streaming=True)
 
     val_dataset = ds.take(args.validation_size)
     train_dataset = ds.skip(args.validation_size)
@@ -57,25 +55,7 @@ def build_model_and_tokenizer(args: TrainArgs):
     tokenizer = setup_tokenizer_with_new_tokens(args.base_model, ALL_NEW_TOKENS)
 
     log_info('Loading model %s', args.base_model)
-    compute_dtype = torch.bfloat16 if args.bf16 else torch.float16
-    bnb_config = None
-    if args.load_in_4bit:
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=args.load_in_4bit,
-            bnb_4bit_quant_type=args.bnb_4bit_quant_type,
-            compute_dtype=compute_dtype,
-            bnb_4bit_use_double_quant=args.bnb_4bit_use_double_quant,
-        )
-
-    model_kwargs: dict[str, Any] = {
-        'load_in_8bit': args.load_in_8bit,
-        'quantization_config': bnb_config,
-        'torch_dtype': compute_dtype,
-        'device_map': 'auto',
-        'attn_implementation': args.attn_implementation,
-    }
-
-    model = AutoModelForCausalLM.from_pretrained(args.base_model, **model_kwargs)
+    model = AutoModelForCausalLM.from_pretrained(args.base_model, **args.model_kwargs)
 
     if args.load_in_4bit or args.load_in_8bit:
         model = prepare_model_for_kbit_training(model)
@@ -126,7 +106,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     model, tokenizer = build_model_and_tokenizer(args)
-    train_ds, val_ds = prepare_dataset(args.dataset, args)
+    train_ds, val_ds = prepare_dataset(args)
     trainer_cfg = SFTConfig(**args.trainer_args)
 
     trainer_kwargs = {

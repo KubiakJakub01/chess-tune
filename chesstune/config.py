@@ -3,7 +3,9 @@
 from pathlib import Path
 from typing import Any
 
+import torch
 from pydantic import BaseModel, Field
+from transformers import BitsAndBytesConfig
 
 
 class QwenGenerationConfig(BaseModel):
@@ -95,6 +97,10 @@ class TrainArgs(BaseModel):
         return QwenGenerationConfig(generation_max_new_tokens=self.generation_max_new_tokens)
 
     @property
+    def compute_dtype(self) -> torch.dtype:
+        return torch.bfloat16 if self.bf16 else torch.float16
+
+    @property
     def trainer_args(self) -> dict[str, Any]:
         return {
             'output_dir': str(self.output_dir),
@@ -127,4 +133,22 @@ class TrainArgs(BaseModel):
             'load_best_model_at_end': True,
             'metric_for_best_model': 'eval_loss',
             'greater_is_better': False,
+        }
+
+    @property
+    def model_kwargs(self) -> dict[str, Any]:
+        bnb_config: BitsAndBytesConfig | None = None
+        if self.load_in_4bit or self.load_in_8bit:
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=self.load_in_4bit,
+                bnb_4bit_quant_type=self.bnb_4bit_quant_type,
+                compute_dtype=self.compute_dtype,
+                bnb_4bit_use_double_quant=self.bnb_4bit_use_double_quant,
+            )
+        return {
+            'load_in_8bit': self.load_in_8bit,
+            'quantization_config': bnb_config,
+            'torch_dtype': self.compute_dtype,
+            'device_map': 'auto',
+            'attn_implementation': self.attn_implementation,
         }
