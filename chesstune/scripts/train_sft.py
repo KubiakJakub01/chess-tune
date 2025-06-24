@@ -6,7 +6,7 @@ from pathlib import Path
 
 from datasets import Dataset, load_dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 from trl import SFTConfig, SFTTrainer
 
 from ..callbacks import LogTextSamplesCallback
@@ -24,7 +24,7 @@ def parse_args() -> TrainArgs:
     args = parser.parse_args()
 
     log_info('Loading configuration from %s', args.config)
-    return TrainArgs.from_json(args.config)
+    return TrainArgs.from_json(args.config, strict=True)
 
 
 def prepare_dataset(args: TrainArgs) -> tuple[Dataset, Dataset]:
@@ -38,6 +38,7 @@ def prepare_dataset(args: TrainArgs) -> tuple[Dataset, Dataset]:
 
     val_dataset = ds.take(args.validation_size)
     train_dataset = ds.skip(args.validation_size)
+    train_dataset = train_dataset.shuffle(seed=args.seed, buffer_size=5000)
 
     return train_dataset, val_dataset
 
@@ -53,6 +54,7 @@ def build_model_and_tokenizer(args: TrainArgs):
     log_info('Setting up tokenizer with chess tokens')
 
     tokenizer = setup_tokenizer_with_new_tokens(args.base_model, ALL_NEW_TOKENS)
+    tokenizer.padding_side = 'left'
 
     log_info('Loading model %s', args.base_model)
     model = AutoModelForCausalLM.from_pretrained(args.base_model, **args.model_kwargs)
@@ -97,8 +99,9 @@ def build_model_and_tokenizer(args: TrainArgs):
 
 def main():
     """Main CLI entry-point."""
-
     args = parse_args()
+    set_seed(args.seed)
+
     if args.wandb_project:
         os.environ['WANDB_PROJECT'] = args.wandb_project
 

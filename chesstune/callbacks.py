@@ -27,7 +27,6 @@ class LogTextSamplesCallback(TensorBoardCallback):
         super().__init__()
         self.eval_dataset = eval_dataset
         self.args = args
-        self._logged_text_samples = False
 
     def on_evaluate(
         self,
@@ -38,7 +37,7 @@ class LogTextSamplesCallback(TensorBoardCallback):
     ) -> None:
         """Log text samples to logger and TensorBoard at evaluation time."""
         # pylint: disable=unused-argument
-        if state.is_world_process_zero and not self._logged_text_samples:
+        if state.is_world_process_zero:
             model = kwargs['model']
             tokenizer = kwargs['processing_class']
 
@@ -47,7 +46,6 @@ class LogTextSamplesCallback(TensorBoardCallback):
                 tokenizer=tokenizer,
                 state=state,
             )
-            self._logged_text_samples = True
 
     @torch.inference_mode()
     def _log_text_samples(

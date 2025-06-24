@@ -63,17 +63,19 @@ class TrainArgs(BaseModel):
     # Evaluation
     validation_size: int = Field(100, description='Size of validation split')
     checkpoint_steps: int = Field(100, description='Steps between checkpoints')
+    num_samples_to_log: int = 1
+    generation_max_new_tokens: int = 1000
 
     # Misc
+    seed: int = 42
     wandb_project: str | None = None
     logging_steps: int = 25
-    save_strategy: str = 'epoch'
+    save_strategy: str = 'steps'
     fp16: bool = False
     bf16: bool = True
     push_to_hub: bool = False
     attn_implementation: str | None = 'flash_attention_2'
-    num_samples_to_log: int = 1
-    generation_max_new_tokens: int = 1000
+    gradient_checkpointing: bool = True
 
     # TensorBoard / tracking
     enable_tensorboard: bool = True
@@ -82,10 +84,10 @@ class TrainArgs(BaseModel):
     )
 
     @classmethod
-    def from_json(cls, path: str | Path) -> 'TrainArgs':
+    def from_json(cls, path: str | Path, strict: bool = False) -> 'TrainArgs':
         """Load configuration from a JSON file located at *path*."""
         with open(path, encoding='utf-8') as f:
-            return cls.model_validate_json(f.read())
+            return cls.model_validate_json(f.read(), strict=strict)
 
     def to_json(self, path: str | Path) -> None:
         """Dump the current config to *path* in UTF-8 encoded JSON."""
@@ -101,6 +103,10 @@ class TrainArgs(BaseModel):
         return torch.bfloat16 if self.bf16 else torch.float16
 
     @property
+    def use_cache(self) -> bool:
+        return not self.gradient_checkpointing
+
+    @property
     def trainer_args(self) -> dict[str, Any]:
         return {
             'output_dir': str(self.output_dir),
@@ -112,7 +118,7 @@ class TrainArgs(BaseModel):
             'max_seq_length': self.max_seq_length,
             'warmup_ratio': self.warmup_ratio,
             'logging_steps': self.logging_steps,
-            'save_strategy': 'steps',
+            'save_strategy': self.save_strategy,
             'push_to_hub': self.push_to_hub,
             'logging_dir': str(self.tensorboard_dir),
             'report_to': ['tensorboard'] if self.enable_tensorboard else [],
@@ -127,12 +133,13 @@ class TrainArgs(BaseModel):
             'bf16_full_eval': self.bf16,
             'fp16': self.fp16,
             'fp16_full_eval': self.fp16,
-            'eval_strategy': 'steps',
+            'eval_strategy': self.save_strategy,
             'eval_steps': self.checkpoint_steps,
             'save_steps': self.checkpoint_steps,
             'load_best_model_at_end': True,
             'metric_for_best_model': 'eval_loss',
             'greater_is_better': False,
+            'gradient_checkpointing': self.gradient_checkpointing,
         }
 
     @property
@@ -150,5 +157,6 @@ class TrainArgs(BaseModel):
             'quantization_config': bnb_config,
             'torch_dtype': self.compute_dtype,
             'device_map': 'auto',
+            'use_cache': self.use_cache,
             'attn_implementation': self.attn_implementation,
         }
