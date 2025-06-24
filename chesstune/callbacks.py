@@ -71,7 +71,7 @@ class LogTextSamplesCallback(TensorBoardCallback):
                 prompt=prompt,
                 model=model,
                 tokenizer=tokenizer,
-                args=self.args,
+                config=self.args.generation_config,
             )
 
             prompts.append(prompt)

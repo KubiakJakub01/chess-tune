@@ -1,6 +1,6 @@
 from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizer
 
-from .config import TrainArgs
+from .config import QwenGenerationConfig
 
 
 def run_inference(
@@ -8,7 +8,7 @@ def run_inference(
     *,
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizer,
-    args: TrainArgs,
+    config: QwenGenerationConfig,
 ) -> str:
     """Runs inference on the model with a given prompt."""
     messages = [{'role': 'user', 'content': prompt}]
@@ -20,11 +20,11 @@ def run_inference(
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
-        max_new_tokens=args.generation_config.generation_max_new_tokens,
-        do_sample=args.generation_config.do_sample,
-        temperature=args.generation_config.temperature,
-        top_k=args.generation_config.top_k,
-        top_p=args.generation_config.top_p,
+        max_new_tokens=config.generation_max_new_tokens,
+        do_sample=config.do_sample,
+        temperature=config.temperature,
+        top_k=config.top_k,
+        top_p=config.top_p,
     )
 
     outputs = model.generate(tokenized_chat, generation_config=generation_config)

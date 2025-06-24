@@ -63,7 +63,8 @@ def build_model_and_tokenizer(args: TrainArgs):
         model = prepare_model_for_kbit_training(model)
 
     # Resize token embeddings
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=64)
+    log_info('Model vocab size after resizing: %d', model.config.vocab_size)
 
     # Properly initialize new token embeddings
     initialize_new_token_embeddings(model, tokenizer, original_vocab_size)
