@@ -13,6 +13,7 @@ from transformers.integrations import TensorBoardCallback
 
 from .config import TrainArgs
 from .inference_ops import run_inference
+from .sft_ops import check_token_embeddings_health
 from .utils import log_info
 
 
@@ -46,6 +47,9 @@ class LogTextSamplesCallback(TensorBoardCallback):
                 tokenizer=tokenizer,
                 state=state,
             )
+
+            # Additional diagnostic: print embedding statistics for new tokens
+            check_token_embeddings_health(model, tokenizer)
 
     @torch.inference_mode()
     def _log_text_samples(
