@@ -1,6 +1,7 @@
 """Supervised fine-tuning operations and utilities for ChessTune."""
 
 import torch
+from torch.optim import AdamW
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from .utils import log_info
@@ -93,3 +94,23 @@ def check_token_embeddings_health(model: PreTrainedModel, tokenizer: PreTrainedT
         log_info('⚠️  Some embeddings have very small norms (<1e-6)')
 
     log_info('=== End Health Check ===')
+
+
+def build_optimizer(model: PreTrainedModel, learning_rate: float, weight_decay: float):
+    """
+    Build an optimizer for the model.
+    """
+    embedding_parameters = list(model.get_input_embeddings().parameters())
+    other_parameters = [p for _, p in model.named_parameters() if p not in embedding_parameters]
+
+    optimizer = AdamW(
+        [
+            {'params': embedding_parameters, 'lr': learning_rate * 10.0},
+            {'params': other_parameters, 'lr': learning_rate},
+        ],
+        betas=(0.9, 0.95),
+        eps=1e-6,
+        weight_decay=weight_decay,
+    )
+
+    return optimizer
