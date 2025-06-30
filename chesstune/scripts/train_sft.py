@@ -6,12 +6,16 @@ from pathlib import Path
 
 from datasets import Dataset, load_dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, get_scheduler, set_seed
 from trl import SFTConfig, SFTTrainer
 
 from ..callbacks import LogTextSamplesCallback
 from ..config import TrainArgs
-from ..sft_ops import check_token_embeddings_health, initialize_new_token_embeddings
+from ..sft_ops import (
+    build_optimizer,
+    check_token_embeddings_health,
+    initialize_new_token_embeddings,
+)
 from ..tokenizer_ops import ALL_NEW_TOKENS, setup_tokenizer_with_new_tokens
 from ..utils import log_error, log_info, log_warning
 
@@ -113,12 +117,21 @@ def main():
     train_ds, val_ds = prepare_dataset(args)
     trainer_cfg = SFTConfig(**args.trainer_args)
 
+    optimizer = build_optimizer(model, args.learning_rate, args.weight_decay)
+    lr_scheduler = get_scheduler(
+        name=args.lr_scheduler_type,
+        optimizer=optimizer,
+        num_warmup_steps=int(args.warmup_ratio * args.num_train_steps),
+        num_training_steps=args.num_train_steps,
+    )
+
     trainer_kwargs = {
         'model': model,
         'processing_class': tokenizer,
         'train_dataset': train_ds,
         'eval_dataset': val_ds,
         'args': trainer_cfg,
+        'optimizers': (optimizer, lr_scheduler),
     }
 
     trainer = SFTTrainer(**trainer_kwargs)
