@@ -96,21 +96,60 @@ def check_token_embeddings_health(model: PreTrainedModel, tokenizer: PreTrainedT
     log_info('=== End Health Check ===')
 
 
-def build_optimizer(model: PreTrainedModel, learning_rate: float, weight_decay: float):
+def build_optimizer(
+    model: PreTrainedModel,
+    base_learning_rate: float,
+    weight_decay: float,
+    embed_lr_multiplier: float = 10.0,
+):
+    """Return an AdamW optimiser with a separate (higher) LR for token embeddings.
+
+    Args:
+        model: The *full* model whose parameters should be optimised.
+        base_learning_rate: LR for *most* parameters.
+        weight_decay: Weight-decay factor for all parameter groups.
+        embed_lr_multiplier: Multiplier applied to *base_learning_rate* for the
+            input-embedding matrix.  A value between 5× and 20× usually speeds
+            up learning for freshly-initialised tokens without destabilising the
+            rest of the network.
+
+    Notes
+    -----
+    • When LoRA is enabled, only LoRA adapters are trainable by default.  We
+      explicitly unfreeze the *token embedding* layer so that new vocabulary
+      vectors can receive gradient updates.
+    • The function prints how many trainable parameters are present in each
+      group, which helps debugging "embeddings not training" issues.
     """
-    Build an optimizer for the model.
-    """
-    embedding_parameters = list(model.get_input_embeddings().parameters())
-    other_parameters = [p for _, p in model.named_parameters() if p not in embedding_parameters]
+    # Ensure the embedding layer is trainable even when PEFT/LoRA is used.
+    embed_layer = model.get_input_embeddings()
+    embed_layer.weight.requires_grad = True
+
+    embed_params = list(embed_layer.parameters())
+    other_params = [p for n, p in model.named_parameters() if p.requires_grad and 'emb' not in n]
 
     optimizer = AdamW(
         [
-            {'params': embedding_parameters, 'lr': learning_rate * 10.0},
-            {'params': other_parameters, 'lr': learning_rate},
+            {
+                'params': embed_params,
+                'lr': base_learning_rate * embed_lr_multiplier,
+            },
+            {
+                'params': other_params,
+                'lr': base_learning_rate,
+            },
         ],
         betas=(0.9, 0.95),
         eps=1e-6,
         weight_decay=weight_decay,
+    )
+
+    log_info(
+        'Optimizer built: %d embed params @ %.2e LR, %d other params @ %.2e LR',
+        sum(p.numel() for p in embed_params),
+        base_learning_rate * embed_lr_multiplier,
+        sum(p.numel() for p in other_params),
+        base_learning_rate,
     )
 
     return optimizer
