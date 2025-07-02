@@ -76,6 +76,11 @@ def build_model_and_tokenizer(args: TrainArgs):
     # Check embedding health after initialization
     check_token_embeddings_health(model, tokenizer)
 
+    # Freeze all parameters
+    for param in model.parameters():
+        param.requires_grad = False
+    log_info('All parameters frozen')
+
     if args.use_lora:
         log_info(
             'Attaching LoRA adapters (r=%d, alpha=%d, dropout=%.2f)',
@@ -97,6 +102,7 @@ def build_model_and_tokenizer(args: TrainArgs):
             ],
         )
         model = get_peft_model(model, peft_cfg)
+        log_info('LoRA parameters:')
         model.print_trainable_parameters()
 
     return model, tokenizer
@@ -117,7 +123,9 @@ def main():
     train_ds, val_ds = prepare_dataset(args)
     trainer_cfg = SFTConfig(**args.trainer_args)
 
-    optimizer = build_optimizer(model, args.learning_rate, args.weight_decay)
+    optimizer = build_optimizer(
+        model, args.learning_rate, args.weight_decay, args.embed_lr_multiplier
+    )
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
