@@ -66,10 +66,10 @@ def run_inference(
         top_p=config.top_p,
     )
 
-    outputs = model.generate(
+    outputs = model.generate(  # type: ignore[attr-defined]
         tokenized_chat,
         generation_config=generation_config,
-    )  # type: ignore[attr-defined]
+    )
     response_tokens = outputs[0][tokenized_chat.shape[1] :]
     response_text = tokenizer.decode(response_tokens, skip_special_tokens=True)
 

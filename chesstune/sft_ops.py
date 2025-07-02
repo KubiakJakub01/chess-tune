@@ -128,8 +128,8 @@ def build_optimizer(
     embed_params = list(embed_layer.parameters())
     other_params = [
         p
-        for n, p in model.named_parameters()
-        if p.requires_grad and 'emb' not in n  # type: ignore[attr-defined]
+        for n, p in model.named_parameters()  # type: ignore[attr-defined]
+        if p.requires_grad and 'emb' not in n
     ]
 
     optimizer = AdamW(
