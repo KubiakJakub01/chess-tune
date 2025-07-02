@@ -144,12 +144,13 @@ def build_optimizer(
         weight_decay=weight_decay,
     )
 
+    embed_param_count = sum(p.numel() for p in embed_params)
+    other_param_count = sum(p.numel() for p in other_params)
+    embed_lr = base_learning_rate * embed_lr_multiplier
+
     log_info(
-        'Optimizer built: %d embed params @ %.2e LR, %d other params @ %.2e LR',
-        sum(p.numel() for p in embed_params),
-        base_learning_rate * embed_lr_multiplier,
-        sum(p.numel() for p in other_params),
-        base_learning_rate,
+        f'Optimizer built: {embed_param_count:,} embed params @ {embed_lr:.2e} LR, '
+        f'{other_param_count:,} other params @ {base_learning_rate:.2e} LR'
     )
 
     return optimizer
