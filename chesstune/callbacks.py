@@ -60,8 +60,8 @@ class LogTextSamplesCallback(TensorBoardCallback):
         # pylint: disable=unused-argument
         super().on_evaluate(args, state, control, **kwargs)
         if state.is_world_process_zero:
-            model = kwargs['model']
-            tokenizer = kwargs.get('tokenizer') or kwargs.get('processing_class')
+            model: PreTrainedModel = kwargs['model']
+            tokenizer: PreTrainedTokenizer = kwargs['processing_class']
 
             self._log_text_samples(
                 model=model,

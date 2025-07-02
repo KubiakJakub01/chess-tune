@@ -51,7 +51,7 @@ def check_token_embeddings_health(model: PreTrainedModel, tokenizer: PreTrainedT
     Check the health of token embeddings, especially new tokens.
     Reports statistics that can help identify training instabilities.
     """
-    embedding_layer = model.get_input_embeddings()
+    embedding_layer = model.get_input_embeddings()  # type: ignore[attr-defined]
     embeddings = embedding_layer.weight.data
 
     # Basic statistics
@@ -122,11 +122,15 @@ def build_optimizer(
       group, which helps debugging "embeddings not training" issues.
     """
     # Ensure the embedding layer is trainable even when PEFT/LoRA is used.
-    embed_layer = model.get_input_embeddings()
+    embed_layer = model.get_input_embeddings()  # type: ignore[attr-defined]
     embed_layer.weight.requires_grad = True
 
     embed_params = list(embed_layer.parameters())
-    other_params = [p for n, p in model.named_parameters() if p.requires_grad and 'emb' not in n]
+    other_params = [
+        p
+        for n, p in model.named_parameters()
+        if p.requires_grad and 'emb' not in n  # type: ignore[attr-defined]
+    ]
 
     optimizer = AdamW(
         [

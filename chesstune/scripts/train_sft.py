@@ -6,7 +6,14 @@ from pathlib import Path
 
 from datasets import Dataset, load_dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from transformers import AutoModelForCausalLM, AutoTokenizer, get_scheduler, set_seed
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    PreTrainedModel,
+    PreTrainedTokenizer,
+    get_scheduler,
+    set_seed,
+)
 from trl import SFTConfig, SFTTrainer
 
 from ..callbacks import LogTextSamplesCallback
@@ -47,7 +54,9 @@ def prepare_dataset(args: TrainArgs) -> tuple[Dataset, Dataset]:
     return train_dataset, val_dataset
 
 
-def build_model_and_tokenizer(args: TrainArgs):
+def build_model_and_tokenizer(
+    args: TrainArgs,
+) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """Loads the base checkpoint and applies optional LoRA adapters."""
 
     log_info('Loading base tokenizer for %s', args.base_model)

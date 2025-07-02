@@ -53,7 +53,7 @@ def run_inference(
     messages = [{'role': 'user', 'content': prompt}]
     tokenized_chat = tokenizer.apply_chat_template(
         messages, tokenize=True, add_generation_prompt=True, return_tensors='pt'
-    ).to(model.device)
+    ).to(model.device)  # type: ignore[union-attr, attr-defined]
 
     generation_config = GenerationConfig(
         bos_token_id=tokenizer.bos_token_id,
@@ -66,7 +66,10 @@ def run_inference(
         top_p=config.top_p,
     )
 
-    outputs = model.generate(tokenized_chat, generation_config=generation_config)
+    outputs = model.generate(
+        tokenized_chat,
+        generation_config=generation_config,
+    )  # type: ignore[attr-defined]
     response_tokens = outputs[0][tokenized_chat.shape[1] :]
     response_text = tokenizer.decode(response_tokens, skip_special_tokens=True)
 

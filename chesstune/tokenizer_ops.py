@@ -3,7 +3,7 @@ from typing import Literal
 import chess
 import chess.pgn
 from pydantic import BaseModel, Field
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from .utils import log_info, log_warning
 
@@ -92,7 +92,7 @@ class MoveRepr(BaseModel):
 
 def setup_tokenizer_with_new_tokens(
     model_name: str, new_tokens_list: list[str] = ALL_NEW_TOKENS
-) -> AutoTokenizer:
+) -> PreTrainedTokenizer:
     """Loads a tokenizer and adds new tokens."""
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 

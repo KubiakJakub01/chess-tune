@@ -65,7 +65,13 @@ class TrainArgs(BaseModel):
     validation_size: int = Field(100, description='Size of validation split')
     checkpoint_steps: int = Field(100, description='Steps between checkpoints')
     num_samples_to_log: int = 1
+
+    # Generation
     generation_max_new_tokens: int = 1000
+    do_sample: bool = True
+    temperature: float = 0.6
+    top_k: int = 20
+    top_p: float = 0.9
 
     # Misc
     seed: int = 42
@@ -97,7 +103,13 @@ class TrainArgs(BaseModel):
     @property
     def generation_config(self) -> QwenGenerationConfig:
         """Get the generation configuration."""
-        return QwenGenerationConfig(generation_max_new_tokens=self.generation_max_new_tokens)
+        return QwenGenerationConfig(
+            generation_max_new_tokens=self.generation_max_new_tokens,
+            do_sample=self.do_sample,
+            temperature=self.temperature,
+            top_k=self.top_k,
+            top_p=self.top_p,
+        )
 
     @property
     def compute_dtype(self) -> torch.dtype:
