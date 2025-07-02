@@ -35,7 +35,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: uv sync --locked --all-extras --dev
+        run: uv sync --locked --dev
 
       - name: Run ruff
         run: uv run ruff check chesstune
@@ -51,7 +51,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: uv sync --locked --all-extras --dev
+        run: uv sync --locked --dev
 
       - name: Run format check
         run: uv run ruff format --check chesstune
@@ -67,7 +67,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: uv sync --locked --all-extras --dev
+        run: uv sync --locked --dev
 
       - name: Run mypy
         run: uv run mypy --ignore-missing-imports chesstune

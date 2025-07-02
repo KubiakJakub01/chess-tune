@@ -205,11 +205,9 @@ dependencies = [
     { name = "chess" },
     { name = "coloredlogs" },
     { name = "datasets" },
-    { name = "flash-attn" },
     { name = "numpy" },
     { name = "peft" },
     { name = "pydantic" },
-    { name = "setuptools" },
     { name = "standard-imghdr" },
     { name = "tensorboard" },
     { name = "torch" },
@@ -228,17 +226,18 @@ dev = [
     { name = "pylint" },
     { name = "ruff" },
 ]
+gpu = [
+    { name = "flash-attn" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "chess", specifier = ">=1.11.2" },
     { name = "coloredlogs", specifier = ">=15.0.1" },
     { name = "datasets", specifier = ">=3.6.0" },
-    { name = "flash-attn", specifier = ">=2.8.0.post2" },
     { name = "numpy", specifier = ">=2.3.0" },
     { name = "peft", specifier = ">=0.15.2" },
     { name = "pydantic", specifier = ">=2.11.6" },
-    { name = "setuptools", specifier = ">=80.9.0" },
     { name = "standard-imghdr", specifier = ">=3.13.0" },
     { name = "tensorboard", specifier = ">=2.19.0" },
     { name = "torch", specifier = ">=2.7.1" },
@@ -257,6 +256,7 @@ dev = [
     { name = "pylint", specifier = "==3.3.7" },
     { name = "ruff", specifier = "==0.11.13" },
 ]
+gpu = [{ name = "flash-attn", specifier = ">=2.8.0.post2" }]
 
 [[package]]
 name = "colorama"
