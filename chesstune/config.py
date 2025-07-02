@@ -43,6 +43,7 @@ class TrainArgs(BaseModel):
     max_seq_length: int = 2048
     warmup_ratio: float = 0.03
     max_grad_norm: float = Field(1.0, description='Maximum gradient norm for clipping')
+    embed_lr_multiplier: float = 10.0
 
     # LoRA
     use_lora: bool = False
@@ -58,7 +59,7 @@ class TrainArgs(BaseModel):
 
     # Training stability
     weight_decay: float = Field(0.01, description='Weight decay for regularization')
-    lr_scheduler_type: str = 'constant'
+    lr_scheduler_type: str = 'adafactor'
 
     # Evaluation
     validation_size: int = Field(100, description='Size of validation split')
