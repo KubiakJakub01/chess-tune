@@ -2,6 +2,7 @@ from typing import Any
 
 import torch
 from datasets import Dataset
+from torchinfo import summary
 from transformers import (
     PreTrainedModel,
     PreTrainedTokenizer,
@@ -29,6 +30,25 @@ class LogTextSamplesCallback(TensorBoardCallback):
         self.eval_dataset = eval_dataset
         self.args = args
 
+    def on_train_begin(
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        **kwargs: Any,
+    ) -> None:
+        """Log model summary to TensorBoard at the beginning of training."""
+        super().on_train_begin(args, state, control, **kwargs)
+        if self.tb_writer is not None:
+            model = kwargs['model']
+            model_summary = summary(model, verbose=0)
+            log_info('Model summary:\n%s', model_summary)
+            self.tb_writer.add_text(
+                'model/summary',
+                f'```\n{model_summary}\n```',
+                state.global_step,
+            )
+
     def on_evaluate(
         self,
         args: TrainingArguments,
@@ -38,9 +58,10 @@ class LogTextSamplesCallback(TensorBoardCallback):
     ) -> None:
         """Log text samples to logger and TensorBoard at evaluation time."""
         # pylint: disable=unused-argument
+        super().on_evaluate(args, state, control, **kwargs)
         if state.is_world_process_zero:
             model = kwargs['model']
-            tokenizer = kwargs['processing_class']
+            tokenizer = kwargs.get('tokenizer') or kwargs.get('processing_class')
 
             self._log_text_samples(
                 model=model,
