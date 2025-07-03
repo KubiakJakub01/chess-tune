@@ -3,16 +3,27 @@
 import argparse
 import os
 from pathlib import Path
-from typing import Any
 
-import torch
-from datasets import load_dataset
-from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from datasets import Dataset, load_dataset
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    PreTrainedModel,
+    PreTrainedTokenizer,
+    get_scheduler,
+    set_seed,
+)
 from trl import SFTConfig, SFTTrainer
 
-from ..sft_ops import check_token_embeddings_health, initialize_new_token_embeddings
-from ..train_config import TrainArgs
+from ..callbacks import LogTextSamplesCallback
+from ..config import TrainArgs
+from ..sft_ops import (
+    build_optimizer,
+    check_token_embeddings_health,
+    initialize_new_token_embeddings,
+)
+from ..tokenizer_ops import ALL_NEW_TOKENS, setup_tokenizer_with_new_tokens
 from ..utils import log_error, log_info, log_warning
 
 
@@ -24,22 +35,28 @@ def parse_args() -> TrainArgs:
     args = parser.parse_args()
 
     log_info('Loading configuration from %s', args.config)
-    return TrainArgs.from_json(args.config)
+    return TrainArgs.from_json(args.config, strict=True)
 
 
-def prepare_dataset(dataset_id: str):
+def prepare_dataset(args: TrainArgs) -> tuple[Dataset, Dataset]:
     """Loads and processes the dataset into a format accepted by SFTTrainer."""
-    if Path(dataset_id).expanduser().exists():
-        log_info('Loading local JSONL dataset from %s', dataset_id)
-        ds = load_dataset('json', data_files=str(dataset_id), split='train')
+    if Path(args.dataset).expanduser().exists():
+        log_info('Loading local JSONL dataset from %s', args.dataset)
+        ds = load_dataset('json', data_files=str(args.dataset), split='train', streaming=True)
     else:
-        log_info('Loading dataset %s from the 🤗 Hub', dataset_id)
-        ds = load_dataset(dataset_id, split='train')
+        log_info('Loading dataset %s from the 🤗 Hub', args.dataset)
+        ds = load_dataset(args.dataset, split='train', streaming=True)
 
-    return ds
+    val_dataset = ds.take(args.validation_size)
+    train_dataset = ds.skip(args.validation_size)
+    train_dataset = train_dataset.shuffle(seed=args.seed, buffer_size=5000)
+
+    return train_dataset, val_dataset
 
 
-def build_model_and_tokenizer(args: TrainArgs):
+def build_model_and_tokenizer(
+    args: TrainArgs,
+) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
     """Loads the base checkpoint and applies optional LoRA adapters."""
 
     log_info('Loading base tokenizer for %s', args.base_model)
@@ -48,26 +65,30 @@ def build_model_and_tokenizer(args: TrainArgs):
 
     # Setup tokenizer with new tokens
     log_info('Setting up tokenizer with chess tokens')
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path)
+
+    tokenizer = setup_tokenizer_with_new_tokens(args.base_model, ALL_NEW_TOKENS)
+    tokenizer.padding_side = 'left'
 
     log_info('Loading model %s', args.base_model)
-    model_kwargs: dict[str, Any] = {
-        'torch_dtype': torch.float16,
-        'device_map': 'auto',
-    }
-    if args.load_in_4bit:
-        model_kwargs['load_in_4bit'] = True
+    model = AutoModelForCausalLM.from_pretrained(args.base_model, **args.model_kwargs)
 
-    model = AutoModelForCausalLM.from_pretrained(args.base_model, **model_kwargs)
+    if args.load_in_4bit or args.load_in_8bit:
+        model = prepare_model_for_kbit_training(model)
 
     # Resize token embeddings
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=64)
+    log_info('Model vocab size after resizing: %d', model.config.vocab_size)
 
     # Properly initialize new token embeddings
     initialize_new_token_embeddings(model, tokenizer, original_vocab_size)
 
     # Check embedding health after initialization
     check_token_embeddings_health(model, tokenizer)
+
+    # Freeze all parameters
+    for param in model.parameters():
+        param.requires_grad = False
+    log_info('All parameters frozen')
 
     if args.use_lora:
         log_info(
@@ -90,6 +111,7 @@ def build_model_and_tokenizer(args: TrainArgs):
             ],
         )
         model = get_peft_model(model, peft_cfg)
+        log_info('LoRA parameters:')
         model.print_trainable_parameters()
 
     return model, tokenizer
@@ -97,8 +119,9 @@ def build_model_and_tokenizer(args: TrainArgs):
 
 def main():
     """Main CLI entry-point."""
-
     args = parse_args()
+    set_seed(args.seed)
+
     if args.wandb_project:
         os.environ['WANDB_PROJECT'] = args.wandb_project
 
@@ -106,34 +129,34 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     model, tokenizer = build_model_and_tokenizer(args)
-    dataset = prepare_dataset(args.dataset)
+    train_ds, val_ds = prepare_dataset(args)
+    trainer_cfg = SFTConfig(**args.trainer_args)
 
-    trainer_cfg = SFTConfig(
-        output_dir=str(args.output_dir),
-        per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=args.grad_accum_steps,
-        learning_rate=args.learning_rate,
-        num_train_epochs=args.epochs,
-        max_seq_length=args.max_seq_length,
-        warmup_ratio=args.warmup_ratio,
-        logging_steps=args.logging_steps,
-        save_strategy=args.save_strategy,
-        fp16=args.fp16,
-        push_to_hub=args.push_to_hub,
-        logging_dir=str(args.tensorboard_dir),
-        report_to=['tensorboard'] if args.enable_tensorboard else [],
-        max_grad_norm=args.max_grad_norm,
-        weight_decay=args.weight_decay,
-        lr_scheduler_type=args.lr_scheduler_type,
-        dataloader_drop_last=True,
-        save_safetensors=True,
-        eval_strategy='no',
-        remove_unused_columns=False,
+    optimizer = build_optimizer(
+        model, args.learning_rate, args.weight_decay, args.embed_lr_multiplier
+    )
+    lr_scheduler = get_scheduler(
+        name=args.lr_scheduler_type,
+        optimizer=optimizer,
+        num_warmup_steps=int(args.warmup_ratio * args.num_train_steps),
+        num_training_steps=args.num_train_steps,
     )
 
-    trainer = SFTTrainer(
-        model=model, processing_class=tokenizer, train_dataset=dataset, args=trainer_cfg
+    trainer_kwargs = {
+        'model': model,
+        'processing_class': tokenizer,
+        'train_dataset': train_ds,
+        'eval_dataset': val_ds,
+        'args': trainer_cfg,
+        'optimizers': (optimizer, lr_scheduler),
+    }
+
+    trainer = SFTTrainer(**trainer_kwargs)
+    text_generation_callback = LogTextSamplesCallback(
+        eval_dataset=val_ds,
+        args=args,
     )
+    trainer.add_callback(text_generation_callback)
 
     log_info('Starting training …')
     trainer.train()

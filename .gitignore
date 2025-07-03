@@ -4,6 +4,7 @@ data/*
 models/*
 debug/*
 runs/*
+**/debug/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

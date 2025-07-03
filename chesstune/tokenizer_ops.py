@@ -3,13 +3,13 @@ from typing import Literal
 import chess
 import chess.pgn
 from pydantic import BaseModel, Field
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from .utils import log_info, log_warning
 
 # Pieces (White, Black)
 PIECE_SYMBOLS = ['P', 'N', 'B', 'R', 'Q', 'K']
-NEW_TOKENS_PIECES = [f'w{s}' for s in PIECE_SYMBOLS] + [f'b{s}' for s in PIECE_SYMBOLS]
+NEW_TOKENS_PIECES = [f'w{s} ' for s in PIECE_SYMBOLS] + [f'b{s} ' for s in PIECE_SYMBOLS]
 
 # Squares (a1 to h8)
 FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
@@ -17,7 +17,7 @@ RANKS = ['1', '2', '3', '4', '5', '6', '7', '8']
 NEW_TOKENS_SQUARES = [f'{f}{r}' for f in FILES for r in RANKS]
 
 # Special Game Tokens
-EMPTY_SQUARE_TOKEN = 'empty_sq'
+EMPTY_SQUARE_TOKEN = 'empty_sq '
 WHITE_TURN_TOKEN = 'w_turn'
 BLACK_TURN_TOKEN = 'b_turn'
 SHORT_CASTLING_TOKEN = 'O-O'
@@ -42,18 +42,18 @@ ALL_NEW_TOKENS = sorted(list(set(NEW_TOKENS_PIECES + NEW_TOKENS_SQUARES + NEW_TO
 
 # Helper Mappings
 PIECE_TO_TOKEN_MAP = {
-    chess.Piece(chess.PAWN, chess.WHITE): 'wP',
-    chess.Piece(chess.KNIGHT, chess.WHITE): 'wN',
-    chess.Piece(chess.BISHOP, chess.WHITE): 'wB',
-    chess.Piece(chess.ROOK, chess.WHITE): 'wR',
-    chess.Piece(chess.QUEEN, chess.WHITE): 'wQ',
-    chess.Piece(chess.KING, chess.WHITE): 'wK',
-    chess.Piece(chess.PAWN, chess.BLACK): 'bP',
-    chess.Piece(chess.KNIGHT, chess.BLACK): 'bN',
-    chess.Piece(chess.BISHOP, chess.BLACK): 'bB',
-    chess.Piece(chess.ROOK, chess.BLACK): 'bR',
-    chess.Piece(chess.QUEEN, chess.BLACK): 'bQ',
-    chess.Piece(chess.KING, chess.BLACK): 'bK',
+    chess.Piece(chess.PAWN, chess.WHITE): 'wP ',
+    chess.Piece(chess.KNIGHT, chess.WHITE): 'wN ',
+    chess.Piece(chess.BISHOP, chess.WHITE): 'wB ',
+    chess.Piece(chess.ROOK, chess.WHITE): 'wR ',
+    chess.Piece(chess.QUEEN, chess.WHITE): 'wQ ',
+    chess.Piece(chess.KING, chess.WHITE): 'wK ',
+    chess.Piece(chess.PAWN, chess.BLACK): 'bP ',
+    chess.Piece(chess.KNIGHT, chess.BLACK): 'bN ',
+    chess.Piece(chess.BISHOP, chess.BLACK): 'bB ',
+    chess.Piece(chess.ROOK, chess.BLACK): 'bR ',
+    chess.Piece(chess.QUEEN, chess.BLACK): 'bQ ',
+    chess.Piece(chess.KING, chess.BLACK): 'bK ',
 }
 
 
@@ -66,13 +66,11 @@ class BoardRepr(BaseModel):
         return cls(board=board_to_custom_token_sequence(board), turn=turn_token)
 
     def to_string(self) -> str:
-        board_str = f'{BOARD_TOKEN} {self.turn}\n'
+        board_str = f'{BOARD_TOKEN}{self.turn}\n'
         for i, token in enumerate(self.board):
             board_str += token
             if (i + 1) % 8 == 0:
                 board_str += '\n'
-            else:
-                board_str += ' '
         board_str += f'{BOARD_END_TOKEN}\n'
         return board_str
 
@@ -88,14 +86,13 @@ class MoveRepr(BaseModel):
         move_str = f'{MOVE_TOKEN}\n'
         for token in self.move:
             move_str += token
-            move_str += ' '
         move_str += f'{MOVE_END_TOKEN}\n'
         return move_str
 
 
 def setup_tokenizer_with_new_tokens(
     model_name: str, new_tokens_list: list[str] = ALL_NEW_TOKENS
-) -> AutoTokenizer:
+) -> PreTrainedTokenizer:
     """Loads a tokenizer and adds new tokens."""
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 

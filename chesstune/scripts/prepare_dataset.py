@@ -1,6 +1,7 @@
 import argparse
 import json
 import random
+from collections import Counter
 from collections.abc import Generator
 from pathlib import Path
 
@@ -53,6 +54,16 @@ def parse_args():
         choices=['conversational', 'instruction'],
         help='Format of the dataset.',
     )
+    parser.add_argument(
+        '--task_weights',
+        type=Path,
+        default=None,
+        help=(
+            'Optional JSON file mapping task names to integer weights.  '
+            'A weight >1 duplicates the corresponding training example, '
+            'thereby oversampling rare tasks.'
+        ),
+    )
     return parser.parse_args()
 
 
@@ -81,6 +92,8 @@ def process_pgn_file(
         board = game.board()
         sft_records = []
 
+        task_counter = Counter(tasks)
+
         for node in game.mainline():
             move = node.move
             san_move = board.san(move)
@@ -90,26 +103,26 @@ def process_pgn_file(
             move_tokens = MoveRepr.from_move(board.copy(), move)
 
             # 1. Predict the custom token move
-            if 'san_to_custom_move' in tasks:
+            if task_counter['san_to_custom_move']:
                 record = predict_custom_token_move(
                     turn_token=turn_token,
                     san_move=san_move,
                     move_tokens=move_tokens,
                     board_before_move_tokens=board_before_move_tokens,
                 )
-                sft_records.append(record)
+                sft_records.extend([record] * task_counter['san_to_custom_move'])
 
             # 2. Board -> SAN move
-            if 'board_to_san_move' in tasks:
+            if task_counter['board_to_san_move']:
                 record = predict_san_move(
                     turn_token=turn_token,
                     san_move=san_move,
                     board_before_move_tokens=board_before_move_tokens,
                 )
-                sft_records.append(record)
+                sft_records.extend([record] * task_counter['board_to_san_move'])
 
             # 3. Board + Move -> Resulting board
-            if 'board_and_move_to_board' in tasks:
+            if task_counter['board_and_move_to_board']:
                 temp_board = board.copy()
                 temp_board.push(move)
                 board_after_move_tokens = BoardRepr.from_board(temp_board, turn_token)
@@ -121,27 +134,27 @@ def process_pgn_file(
                     board_before_move_tokens=board_before_move_tokens,
                     board_after_move_tokens=board_after_move_tokens,
                 )
-                sft_records.append(record)
+                sft_records.extend([record] * task_counter['board_and_move_to_board'])
 
             # 4. Board tokens -> FEN and FEN -> Board tokens
-            if 'board_to_fen' in tasks:
+            if task_counter['board_to_fen']:
                 fen_before = board.fen()
 
                 record = board_to_fen_conversion(
                     board_before_move_tokens=board_before_move_tokens,
                     fen_before=fen_before,
                 )
-                sft_records.append(record)
+                sft_records.extend([record] * task_counter['board_to_fen'])
 
-            if 'fen_to_board' in tasks:
+            if task_counter['fen_to_board']:
                 record = fen_to_board_conversion(
                     fen_before=fen_before,
                     board_before_move_tokens=board_before_move_tokens,
                 )
-                sft_records.append(record)
+                sft_records.extend([record] * task_counter['fen_to_board'])
 
             # 5. Square query (random square from board)
-            if 'square_query' in tasks:
+            if task_counter['square_query']:
                 random_square_index = random.choice(list(chess.SQUARES))
                 square_name = chess.square_name(random_square_index)
                 piece_at_square = board.piece_at(random_square_index)
@@ -157,7 +170,7 @@ def process_pgn_file(
                     square_name=square_name,
                     answer_token=answer_token,
                 )
-                sft_records.append(record)
+                sft_records.extend([record] * task_counter['square_query'])
 
             try:
                 board.push(move)
@@ -177,13 +190,26 @@ def main(
     output_filepath: Path,
     max_records: int | None,
     dataset_format: str,
+    task_weights_file: Path | None = None,
 ):
+    expanded_tasks = tasks.copy()
+    if task_weights_file and task_weights_file.exists():
+        task_weights: dict[str, int] = json.loads(task_weights_file.read_text(encoding='utf-8'))
+        log_info('Loaded task weights from %s', task_weights_file)
+
+        expanded_tasks = []
+        for task_name in tasks:
+            repeats = int(task_weights.get(task_name, 1))
+            expanded_tasks.extend([task_name] * max(repeats, 1))
+
+        log_info('Task list expanded for oversampling: %s', expanded_tasks)
+
     sft_data_count = 0
     output_filepath.parent.mkdir(parents=True, exist_ok=True)
     log_info('Starting to process %s and saving to %s...', pgn_filepath, output_filepath)
 
     with output_filepath.open('w', encoding='utf-8') as f_out:
-        for sft_record in process_pgn_file(pgn_filepath, tasks):
+        for sft_record in process_pgn_file(pgn_filepath, expanded_tasks):
             if dataset_format == 'conversational':
                 f_out.write(
                     json.dumps(sft_record.conversational_format(), ensure_ascii=False) + '\n'
@@ -202,4 +228,11 @@ def main(
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args.pgn_filepath, args.tasks, args.output_filepath, args.max_records, args.dataset_format)
+    main(
+        args.pgn_filepath,
+        args.tasks,
+        args.output_filepath,
+        args.max_records,
+        args.dataset_format,
+        args.task_weights,
+    )
